@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/bin/bash
+
+$GLOBUS_LOCATION/bin/grid-proxy-init
 
 $GLOBUS_LOCATION/bin/workspace \
     -z none \

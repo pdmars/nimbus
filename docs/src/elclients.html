@@ -2,7 +2,7 @@ m4_include(/mcs/m4/worksp.lib.m4)
 _NIMBUS_HEADER(EC2 Client Notes)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_CENTER3_COLUMN
-_NIMBUS_2_3_DEPRECATED
+_NIMBUS_2_4_DEPRECATED
 
 <h2>EC2 Client Notes</h2>
 
@@ -31,7 +31,7 @@ _NIMBUS_2_3_DEPRECATED
 </p>
 <ul>
 	<li>
-	    Nimbus 2.3 supports the "2009-08-15" WSDL
+	    Nimbus 2.3+ supports the "2009-08-15" WSDL
         (<a href="http://s3.amazonaws.com/ec2-downloads/ec2-api-tools-1.3-42584.zip">this EC2
         client</a>) .
 	</li>
@@ -189,12 +189,15 @@ _EXAMPLE_CMD_END
 <h2>Using the EC2 Query frontend from Python with Boto _NAMELINK(ec2-api-tools)</h2>
 
 <p>
-    Nimbus 2.3 has experimental support for the EC2 Query interface, which is used
+    Nimbus 2.4 has experimental support for the EC2 Query interface, which is used
     by the excellent Python client, <a href="http://code.google.com/p/boto/">boto</a>.
     In order to use this interface, you must have Query credentials from the cloud
     administrator. These are composed of an <i>access identifier</i> (usually the hash
-    of your DN) and a shared <i>secret key</i>. You also need the URL of the Query
-    interface on the Nimbus service node.
+    of your DN) and a shared <i>secret key</i>.
+</p>
+<p>
+    You also need the URL of the Query interface on the Nimbus service node. See the
+    <a href="_NIMBUS_WEBSITE/nimbus_cloud">University of Chicago cloud</a> for example.
 </p>
 
 <div class="screen"><pre>

@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/bash -x
 
 # (you will probably want to change the URLs and edit the sample
 #  files in $GLOBUS_LOCATION/share/nimbus-clients )
@@ -15,4 +15,5 @@ $GLOBUS_LOCATION/bin/workspace --deploy --file ensemble1-group2 \
   --deploy-duration 60 --deploy-mem 2048 --deploy-state Running \
   --join-ensemble ensemble1-whole-ensemble.epr --last-in-ensemble \
   --trash-at-shutdown \
+  --poll-delay 2000 \
   --numnodes 2 --terse-group-subscribe --groupfile ensemble1-group2.epr

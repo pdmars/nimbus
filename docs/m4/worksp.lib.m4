@@ -27,6 +27,7 @@ m4_dnl
 m4_define([[[_NIMBUS_TP2_1_DEPRECATED',<br><h1><font color="red"><b>DEPRECATED</b>: The most recent version is <a href="/vm/TP2.2/index.html">Nimbus TP2.2</a></font></h1><br>)m4_dnl
 m4_define([[[_NIMBUS_TP2_2_DEPRECATED',<!-- TP2.2 is the current version -->)m4_dnl
 m4_define([[[_NIMBUS_2_3_DEPRECATED',<!-- 2.3 is the current version -->)m4_dnl
+m4_define([[[_NIMBUS_2_4_DEPRECATED',<!-- 2.4 is the current version -->)m4_dnl
 m4_dnl
 m4_define([[[_WORKSP_DA_DEPRECATED',
 <div style="border:2px solid #000000;">
@@ -337,10 +338,10 @@ m4_define([[[_NIMBUS_LEFT2_ADMIN_SIDEBAR',
 <div id="sidebarmenu">
     <ul>
         <li>
-          <a href="index.html" title="Admin Overview" class="$1">Admin Overview</a>
+          <a href="index.html" title="Admin Overview" class="$1">Overview</a>
         </li>
         <li>
-          <a href="quickstart.html" title="Quickstart" class="$2">Quickstart</a>
+          <a href="quickstart.html" title="Quickstart" class="$2">Start</a>
         </li>
         <li>
           <a href="reference.html" title="Reference" class="$3">Reference</a>
@@ -363,10 +364,10 @@ m4_define([[[_NIMBUS_LEFT2_ADMIN2_SIDEBAR',
 <div id="sidebarmenu">
     <ul>
         <li>
-          <a href="../admin/index.html" title="Admin Overview">Admin Overview</a>
+          <a href="../admin/index.html" title="Admin Overview">Overview</a>
         </li>
         <li>
-          <a href="../admin/quickstart.html" title="Quickstart">Quickstart</a>
+          <a href="../admin/quickstart.html" title="Quickstart">Start</a>
         </li>
         <li>
           <a href="../admin/reference.html" title="Reference">Reference</a>
@@ -398,7 +399,7 @@ m4_define([[[_NIMBUS_LEFT2_CLOUDS1_SIDEBAR',
           <a href="clusters2.html" title="Cluster guide" class="$5">Cluster guide</a>
         </li>
         <li>
-          <a href="multicloud.html" title="Multi-cloud clusters" class="$6">Multi-cloud clusters</a>
+          <a href="multicloud.html" title="Multi-cloud" class="$6">Multi-cloud</a>
         </li>
         <li>
           <a href="appendix.html" title="Appendix" class="$7">Appendix</a>
@@ -424,7 +425,7 @@ m4_define([[[_NIMBUS_LEFT2_CLOUDS2_SIDEBAR',
           <a href="../clouds/clusters2.html" title="Cluster guide">Cluster guide</a>
         </li>
         <li>
-          <a href="../clouds/multicloud.html" title="Multi-cloud clusters">Multi-cloud clusters</a>
+          <a href="../clouds/multicloud.html" title="Multi-cloud">Multi-cloud</a>
         </li>
         <li>
           <a href="../clouds/appendix.html" title="Appendix">Appendix</a>
@@ -440,7 +441,7 @@ m4_define([[[_NIMBUS_INTERFACES_WARNING',
     <i>Note</i>: this is only one set of remote interfaces. It is compatible
     with WSRF technology. Nimbus supports multiple remote protocols (even
     simultaneously) like the implementation of the
-    <a href="http://www.nimbusproject.org/docs/?doc=current/faq.html#ec2-frontend">EC2 protocol</a>.
+    <a href="http://www.nimbusproject.org/docs/current/faq.html#ec2-frontend">EC2 protocol</a>.
 </p>
 <br />
 <br />

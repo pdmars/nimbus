@@ -7,6 +7,7 @@ _NIMBUS_LEFT2_ABOUT_SIDEBAR(n,y,n,n)
 
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
+_NIMBUS_2_4_DEPRECATED
 
 <h2>Frequently Asked Questions</h2>
 
@@ -64,9 +65,6 @@ _NIMBUS_CENTER2_COLUMN
         <a href="#defcloudkit">What is the cloudkit</a>?
     </li>
     <li>
-        <a href="#autocontainer">What is the AutoContainer</a>?
-    </li>
-    <li>
         <a href="#nimbusweb">What is Nimbus Web</a>?
     </li>
     <li>
@@ -82,8 +80,8 @@ _NIMBUS_CENTER2_COLUMN
 <ul>
 
     <li>
-        <a name="nimbus"> </a>
         <p>
+            <a name="nimbus"> </a>
             <b>What is Nimbus? _NAMELINK(nimbus)</b>
         </p>
 
@@ -110,8 +108,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
     
     <li>
-        <a name="cloudkit"> </a>
         <p>
+            <a name="cloudkit"> </a>
             <b>What is the main way to deploy Nimbus? _NAMELINK(cloudkit)</b>
         </p>
 
@@ -137,8 +135,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="install"> </a>
         <p>
+            <a name="install"> </a>
             <b>Is Nimbus hard to install? _NAMELINK(install)</b>
         </p>
         <p>
@@ -150,8 +148,8 @@ _NIMBUS_CENTER2_COLUMN
         <p>
             Nimbus requires that some dependencies are installed first.  On the
             service node: <b>Java</b> (1.5+) and <b>bash</b>.  On the
-            hypervisor nodes: <b>Python</b> (2.3+), <b>bash</b>,
-            <b>ebtables</b>, <b>DHCPd</b>, and <b>Xen</b>
+            hypervisor nodes: <b>Python</b> (2.4+), <b>bash</b>,
+            <b>ebtables</b>, <b>DHCPd</b>, <b>libvirt</b> and <b>KVM</b> or <b>Xen</b>
             (2 works but 3 is recommended).
         </p>
         <p>
@@ -161,8 +159,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="nimbus-main-components"> </a>
         <p>
+            <a name="nimbus-main-components"> </a>
             <b>What are the main Nimbus components? _NAMELINK(nimbus-main-components)</b>
         </p>
 
@@ -183,7 +181,7 @@ _NIMBUS_CENTER2_COLUMN
             <li>
                 <p>
                     An <a href="#ec2-frontend">EC2 based</a> remote protocol
-                    implementation (<a href="#ec2-messaging">partial</a>)
+                    implementation of their SOAP and Query APIs (<a href="#ec2-messaging">partial</a>)
                 </p>
             </li>
             <li>
@@ -257,21 +255,23 @@ _NIMBUS_CENTER2_COLUMN
 
         <p>
             Writing new components should be a matter of "dropping" them
-            in.  For example, this summer saw a workspace-control replacement
-            that adds support for KVM virtual machines (this is a Google Summer
-            of Code project whose result will be integrated into Nimbus
-            officially in the fall).  As explained in
+            in.  As explained in
             "<a href="#rm-api">What is the RM API</a>?", the Java side of things
-            is LEGO&#0174; like.  And we are working towards modularizing
+            is particularly LEGO&#0174; like.
+            As of Nimbus 2.3 workspace-control (the VMM component) is modularized with around 10 plugin points.
+            And we are working towards modularizing
             even more and providing better implementations for various
-            components.  Any questions, suggestions, and requirements in this
+            components. 
+        </p>
+        <p>
+            Any questions, suggestions, and requirements in this
             area are appreciated.
         </p>
     </li>
 
     <li>
-        <a name="workspace-service"> </a>
         <p>
+            <a name="workspace-service"> </a>
             <b>What is the Workspace Service? _NAMELINK(workspace-service)</b>
         </p>
 
@@ -281,10 +281,8 @@ _NIMBUS_CENTER2_COLUMN
         </p>
 
         <p>
-            The current supported protocols (WSRF and EC2) happen to both be
-            Web Services based and happen to both
-            run in the <a href="http://ws.apache.org/axis/">Apache Axis</a>
-            based GT Java container.  But neither thing is a necessity:
+            The current supported protocols are Web Services based or HTTP based.  They all run in either an <a href="http://ws.apache.org/axis/">Apache Axis</a>
+            based Java container or <a href="http://cxf.apache.org/">Apache CXF</a>.  But there is only a certain level of necessity:
         </p>
 
         <div class="uldonotmoveleft">
@@ -313,8 +311,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="wsrf-frontend"> </a>
         <p>
+            <a name="wsrf-frontend"> </a>
             <b>What is the WSRF frontend? _NAMELINK(wsrf-frontend)</b>
         </p>
 
@@ -326,20 +324,19 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="ec2-frontend"> </a>
         <p>
+            <a name="ec2-frontend"> </a>
             <b>What is the EC2 frontend?</b>
         </p>
 
         <p>
-            This is an implementation of the Amazon
+            This is an implementation of two of the Amazon
             <a href="http://aws.amazon.com/ec2">Elastic Compute Cloud</a> (EC2)
-            web services description (WSDL) that allows you to use clients
+            interfaces that allow you to use clients
             developed for the real EC2 system against Nimbus based clouds.
         </p>
 		<p>
-		There is support for both EC2 interfaces: SOAP and Query. The Query
-		API support is present in the 2.3 release.
+		    There is support for both EC2 interfaces: SOAP and Query.
 		</p>	 
         <p>
             See <a href="#ec2-messaging">What EC2 operations are supported</a>?
@@ -347,8 +344,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="ec2-messaging"> </a>
         <p>
+            <a name="ec2-messaging"> </a>
             <b>What EC2 operations are supported? _NAMELINK(ec2-messaging)</b>
         </p>
 
@@ -358,7 +355,8 @@ _NIMBUS_CENTER2_COLUMN
         <p>
             Nimbus provides a partial protocol implementation of EC2's
             WSDL (namespace <i>http://ec2.amazonaws.com/doc/2009-08-15/</i>,
-            a previous version supported <i>2008-05-05</i>).
+            a previous version supported <i>2008-05-05</i>) and the Query API
+            complement to that WSDL.
             The operations behind these EC2 commandline clients are currently
             provided:
         </p>
@@ -438,8 +436,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="cloud-client"> </a>
         <p>
+            <a name="cloud-client"> </a>
             <b>What is the cloud client? _NAMELINK(cloud-client)</b>
         </p>
 
@@ -454,8 +452,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="reference-client"> </a>
         <p>
+            <a name="reference-client"> </a>
             <b>What is the reference client? _NAMELINK(reference-client)</b>
         </p>
 
@@ -476,8 +474,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="wpilot"> </a>
         <p>
+            <a name="wpilot"> </a>
             <b>What is the Workspace Pilot? _NAMELINK(wpilot)</b>
         </p>
 
@@ -522,8 +520,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="rm-api"> </a>
         <p>
+            <a name="rm-api"> </a>
             <b>What is the RM API? _NAMELINK(rm-api)</b>
         </p>
 
@@ -544,16 +542,11 @@ _NIMBUS_CENTER2_COLUMN
             and when callers get VMs, it assigns resources to use, and takes
             them away at the appropriate times, etc.
         </p>
-        <p>
-            You can see the API javadocs online
-            <a href="doc/api/rm/overview-summary.html">here</a>
-            (version _WORKSP_CURRENT_VM_VERSION)
-        </p>
     </li>
 
     <li>
-        <a name="wcontrol"> </a>
         <p>
+            <a name="wcontrol"> </a>
             <b>What is workspace-control? _NAMELINK(wcontrol)</b>
         </p>
         
@@ -564,20 +557,17 @@ _NIMBUS_CENTER2_COLUMN
             contextualization information (see Context Broker).
         </p>
         <p>
-            Currently, the workspace control tools work with Xen and KVM but
-            only the Xen version is distributed.  A Google Summer of Code
-            student added KVM support which should be fully integrated this
-            fall.
+            Currently, the workspace control tools work with Xen and KVM.
         </p>
         <p>
             Implemented in Python in order to be portable and easy to install.
-            Requires sudo, ebtables, and a DHCP server library.
+            Requires libvirt, sudo, ebtables, and a DHCP server library.
         </p>
     </li>
 
     <li>
-        <a name="ctxbroker"> </a>
         <p>
+            <a name="ctxbroker"> </a>
             <b>What is the Context Broker? _NAMELINK(ctxbroker)</b>
         </p>
 
@@ -597,8 +587,7 @@ _NIMBUS_CENTER2_COLUMN
         <p>
             This is a user-oriented system that runs as an "overlay" on top of
             the normal VM-on-demand mechanics.  It's been used on top of Nimbus
-            clouds as well as with EC2 resources via the
-            <a href="#ec2-backend">EC2 backend</a>.
+            clouds as well as with EC2 resources.
         </p>
         <p>
             See the <a href="clouds/clusters2.html">one-click clusters
@@ -608,8 +597,8 @@ _NIMBUS_CENTER2_COLUMN
         </p>
     </li>
     <li>
-        <a name="ctxagent"> </a>
         <p>
+            <a name="ctxagent"> </a>
             <b>What is the Context Agent? _NAMELINK(ctxagent)</b>
         </p>
         <p>
@@ -628,8 +617,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="ec2-backend"> </a>
         <p>
+            <a name="ec2-backend"> </a>
             <b>What is the EC2 backend? _NAMELINK(ec2-backend)</b>
         </p>
 
@@ -684,8 +673,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
     
     <li>
-        <a name="defcloudkit"> </a>
         <p>
+            <a name="defcloudkit"> </a>
             <b>What is the "cloudkit"? _NAMELINK(defcloudkit)</b>
         </p>
 
@@ -695,37 +684,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="autocontainer"> </a>
         <p>
-            <b>What is the AutoContainer? _NAMELINK(autocontainer)</b>
-        </p>
-
-        <p>
-            Currently Nimbus is deployed into a Globus 4.0.x Java container
-            which is a system built around the
-            <a href="http://ws.apache.org/axis/">Apache Axis</a> engine.
-        </p>
-
-        <p>
-            To get you started with this system very quickly,
-            we provide something called the <b>AutoContainer</b> which
-            is a complete Globus Java web services core environment.  It comes
-            with a setup program that configures everything you need to get
-            a secure web services container running <i>from scratch in about
-            a minute</i>.
-        </p>
-        <p>
-            Instructions are in
-            <a href="admin/quickstart.html#acquire-auto-container">this
-            section</a> of the
-            <a href="admin/index.html">administrator
-            guide</a>.
-        </p>
-    </li>
-
-    <li>
-        <a name="nimbusweb"> </a>
-        <p>
+            <a name="nimbusweb"> </a>
             <b>What is Nimbus Web? <span class="namelink"><a href="#nimbusweb">(#)</a></span></b>
         </p>
 
@@ -758,8 +718,8 @@ _NIMBUS_CENTER2_COLUMN
     </li>
 
     <li>
-        <a name="license"> </a>
         <p>
+            <a name="license"> </a>
             <b>How is the software licensed? _NAMELINK(license)</b>
         </p>
 

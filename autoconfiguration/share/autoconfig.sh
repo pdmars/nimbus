@@ -627,7 +627,7 @@ while [ $count -lt 6 ]; do
   echo ""
   echo "We are looking for the directory on the VMM to push customization files from the container node. This defaults to '$CONTROL_TMPDIR'"
   echo ""
-  echo "Did you install workspace-control under some other base directory besides /opt/workspace? y/n: "
+  echo "Did you install workspace-control under some other base directory besides /opt/nimbus? y/n: "
   read response
   if [ "$response" = "y" ]; then
     RESPONSE="y"
@@ -653,7 +653,7 @@ if [ "y" = "$RESPONSE" ]; then
     echo ""
     echo "What is the absolute path to the workspace-control temporary scratch directory on the VMM node?"
     echo ""
-    echo "It's typically at 'BASEDIR/tmp' if workspace-control is at 'BASEDIR/bin/workspace-control'"
+    echo "It's typically at 'BASEDIR/var/workspace-control/tmp' if workspace-control is at 'BASEDIR/bin/workspace-control.sh'"
     
     read response
     if [ "X$response" != "X" ]; then

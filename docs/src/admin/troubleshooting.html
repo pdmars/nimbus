@@ -1,13 +1,13 @@
 m4_include(/mcs/m4/worksp.lib.m4)
-_NIMBUS_HEADER(2.3 Troubleshooting)
+_NIMBUS_HEADER(2.4 Troubleshooting)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_LEFT2_COLUMN
 _NIMBUS_LEFT2_ADMIN_SIDEBAR(n,n,n,y,n)
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_2_3_DEPRECATED
+_NIMBUS_2_4_DEPRECATED
 
-<h2>Nimbus 2.3 Troubleshooting</h2>
+<h2>Nimbus 2.4 Troubleshooting</h2>
 
 <p>
     Any questions can be posted to the workspace-user mailing list and will
@@ -44,9 +44,9 @@ _NIMBUS_2_3_DEPRECATED
 <ul>
     <li>
         <p>
-            <a href="http://bugzilla.globus.org/bugzilla/buglist.cgi?query_format=advanced&short_desc_type=allwordssubstr&short_desc=&product=Nimbus&version=2.3&long_desc_type=allwordssubstr&long_desc=&bug_file_loc_type=allwordssubstr&bug_file_loc=&keywords_type=allwords&keywords=&bug_status=ASSIGNED&bug_status=REOPENED&bug_status=RESOLVED&bug_status=VERIFIED&bug_status=CLOSED&bug_severity=blocker&bug_severity=critical&bug_severity=major&bug_severity=normal&bug_severity=minor&bug_severity=trivial&emailtype1=substring&email1=&emailtype2=substring&email2=&bugidtype=include&bug_id=&votes=&chfieldfrom=&chfieldto=Now&chfieldvalue=&cmdtype=doit&order=Reuse+same+sort+as+last+time&field0-0-0=noop&type0-0-0=noop&value0-0-0=">Known
+            <a href="http://bugzilla.globus.org/bugzilla/buglist.cgi?query_format=advanced&short_desc_type=allwordssubstr&short_desc=&product=Nimbus&version=2.4&long_desc_type=allwordssubstr&long_desc=&bug_file_loc_type=allwordssubstr&bug_file_loc=&keywords_type=allwords&keywords=&bug_status=ASSIGNED&bug_status=REOPENED&bug_status=RESOLVED&bug_status=VERIFIED&bug_status=CLOSED&bug_severity=blocker&bug_severity=critical&bug_severity=major&bug_severity=normal&bug_severity=minor&bug_severity=trivial&emailtype1=substring&email1=&emailtype2=substring&email2=&bugidtype=include&bug_id=&votes=&chfieldfrom=&chfieldto=Now&chfieldvalue=&cmdtype=doit&order=Reuse+same+sort+as+last+time&field0-0-0=noop&type0-0-0=noop&value0-0-0=">Known
             issues</a>: custom query to the bugzilla system, it lists out
-            all known issues with 2.3 Nimbus components.
+            all known issues with 2.4 Nimbus components.
         </p>
     </li>
 </ul>
@@ -289,6 +289,28 @@ General: An error was discovered processing the &lt;wsse:Security&gt; header.
             JNDI files. Hence, the configurations are consumed multiple
             times which is an error because only one of each can be
             "bound in this context" at a time.
+        </p>
+    </li>
+<br /><hr />
+    
+    <li>
+        <a name="libvirt-debian"> </a>
+        <p>
+            Problem: The workspace-control "sbin/test-dependencies.sh" fails
+            to work on Debian.
+            _NAMELINK(libvirt-debian)
+        </p>
+        <p>
+            Debian has an old libvirt version so installing it is often a matter
+            of running "configure --with-python; make; make install"
+        </p>
+        <p>
+            But that still may make the "sbin/test-dependencies.sh" script fail
+            because the "import libvirt" statement will not work at all.  
+        </p>
+        <p>
+            Solution: Add the location of libvirt.so.0 to the LD_LIBRARY_PATH
+            environment variable.
         </p>
     </li>
 </ul>

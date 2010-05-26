@@ -13,17 +13,20 @@ if [ ! -d $NIMBUS_WEBDIR ]; then
     exit 1
 fi
 
-NIMBUS_CONF="$NIMBUS_HOME/nimbus-setup.conf"
-SETUP_ARGS="--conf $NIMBUS_CONF $@"
-
 NIMBUS_PYLIB="$NIMBUS_WEBDIR/lib/python"
 NIMBUS_PYSRC="$NIMBUS_WEBDIR/src/python"
 
 PYTHONPATH="$NIMBUS_PYSRC:$NIMBUS_PYLIB:$PYTHONPATH"
 export PYTHONPATH
 
-
 # ------------------------------------------------------------------------------
+
+# returns 0 if Python 2.4+
+$PYTHON_EXE -c "import sys; sys.exit(sys.version_info < (2,4))"
+if [ $? -ne 0 ]; then
+    echo "ERROR: Your system must have Python version 2.4 or later."
+    exit 1
+fi
 
 # The following script expands the tarballs in lib/
 $NIMBUS_WEBDIR/sbin/install-deps.sh $DEBUG
@@ -33,7 +36,7 @@ if [ $? -ne 0 ]; then
     exit 3
 fi
 
-$PYTHON_EXE $NIMBUS_HOME/sbin/nimbusconfigure.py --basedir $NIMBUS_HOME $SETUP_ARGS
+$PYTHON_EXE $NIMBUS_HOME/sbin/nimbusconfigure.py --basedir $NIMBUS_HOME $@
 EXITCODE=$?
 if [ $EXITCODE -ne 42 ]; then
 
@@ -44,13 +47,4 @@ if [ $EXITCODE -ne 42 ]; then
         echo "Nimbus is not set up properly, exiting."
         exit 2
     fi
-fi
-
-
-#TODO this functionality should be moved into nimbusconfigure.py
-$NIMBUS_WEBDIR/sbin/new-conf.sh
-if [ $? -ne 0 ]; then
-    echo ""
-    echo "Nimbus web is not set up properly, exiting."
-    exit 2
 fi
