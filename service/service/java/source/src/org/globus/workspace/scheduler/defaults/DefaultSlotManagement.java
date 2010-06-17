@@ -65,6 +65,9 @@ public class DefaultSlotManagement implements SlotManagement {
     private String vmmpoolDirectory;
     private boolean greedy;
 
+    private Hashtable backfillVMs = new Hashtable();
+    private Set oldBackfillIDs = new HashSet();
+
 
     // -------------------------------------------------------------------------
     // CONSTRUCTOR
@@ -145,6 +148,14 @@ public class DefaultSlotManagement implements SlotManagement {
         final String[] hostnames =
                 this.reserveSpace(vmids, req.getMemory(),
                                   req.getNeededAssociations());
+
+        if (req.getBackfillReq() == true) {
+            for (int i=0; i < vmids.length; i++) {
+                this.backfillVMs.put(vmids[i], hostnames[i]);
+            }
+            logger.debug("Added backfill node to the hashtable: " +
+                         this.backfillVMs.toString());
+        }
 
         return new Reservation(vmids, hostnames);
     }
@@ -441,6 +452,15 @@ public class DefaultSlotManagement implements SlotManagement {
         ResourcepoolUtil.retireMem(node, mem, this.db,
                                    this.lager.eventLog, this.lager.traceLog,
                                    vmid);
+
+        if (this.backfillVMs.remove(vmid) != null) {
+            logger.debug("Removed backfill node from the hashtable: " +
+                        this.backfillVMs.toString());
+            this.oldBackfillIDs.add(vmid);
+        } else {
+            logger.debug("Failed to remove backfill node from the " +
+                         "hashtable: " + Integer.toString(vmid));
+        }
     }
 
     public void setScheduler(Scheduler adapter) {
@@ -542,5 +562,24 @@ public class DefaultSlotManagement implements SlotManagement {
         }
 
         this.db.replaceResourcepools(new_resourcepools);
+    }
+
+    public int getBackfillVMID() {
+        if (this.backfillVMs.isEmpty() == true) {
+            return -1;
+        } else {
+            Enumeration e = this.backfillVMs.keys();
+            String vmidStr = e.nextElement().toString();
+            int vmid = Integer.parseInt(vmidStr.trim());
+            return vmid;
+        }
+    }
+
+    public boolean isOldBackfillID(int vmid) {
+        return this.oldBackfillIDs.contains(vmid);
+    }
+
+    public boolean isCurrentBackfillID(int vmid) {
+        return this.backfillVMs.contains(vmid);
     }
 }
