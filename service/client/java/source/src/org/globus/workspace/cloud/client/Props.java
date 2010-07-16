@@ -34,13 +34,22 @@ public class Props {
             KEY_FACTORY_HOSTPORT = "vws.factory";
 
     public static final String
+            KEY_S3_ALLOW_SELF_SIGNED = "vws.repository.s3acceptallcerts";
+
+    public static final String
             KEY_XFER_HOSTPORT = "vws.repository";
 
     public static final String
             KEY_XFER_TYPE = "vws.repository.type";
 
     public static final String
+            KEY_S3_HTTPS = "vws.repository.s3https";
+
+    public static final String
             KEY_S3_ID = "vws.repository.s3id";
+
+    public static final String
+                KEY_CANONICAL_ID = "vws.repository.canonicalid";
 
     public static final String
             KEY_S3_KEY = "vws.repository.s3key";

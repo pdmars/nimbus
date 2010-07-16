@@ -13,7 +13,9 @@ import sys
 from nimbusweb.setup.setuperrors import *
 from nimbusweb.setup import runutil
 import pynimbusauthz
+import pycb
 from pynimbusauthz.cmd_opts import cbOpts
+from pynimbusauthz.user import User
 
 logger = logging.getLogger("nimbusreset")
 
@@ -34,14 +36,21 @@ def reset_vmstate(nh):
         raise CLIError('ECMDLINE', "Problem:\nexit code: %d\nstdout: '%s'\nstderr: '%s'" % (exit, stdout, stderr))
 
 
-def reset_users(nh):
-    cmd = "/bin/true"
-    if not os.path.exists(cmd):
-        raise CLIError('EPATH', "Can not find reset script: %s" % cmd)
-    (exit, stdout, stderr) = runutil.runexe(cmd, logger, killtime=0)
-    if exit:
-        raise CLIError('ECMDLINE', "Problem:\nexit code: %d\nstdout: '%s'\nstderr: '%s'" % (exit, stdout, stderr))
-
+def reset_users(nh, clean_pattern='%'):
+    dbobj = pynimbusauthz.get_db_connection_string()
+    users_to_delete = User.find_user_by_friendly(dbobj, clean_pattern)
+    for user in users_to_delete:
+        files = File.get_user_files(dbobj, user)
+        for f in files:
+            name = f.get_data_key()
+            f.delete()
+            # commit every file delete before removing the actual file
+            dbobj.commit()
+            pycb.config.bucket.delete_object(name)
+        user.destroy_brutally()
+        # commit after every user because otherwise the file delete inner 
+        # loop will commit in less obvious ways
+        dbobj.commit()
 
 def get_nimbus_home():
     """Determines home directory of Nimbus install we are using.

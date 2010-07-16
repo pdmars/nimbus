@@ -96,6 +96,9 @@ public class AllArgs {
     private String xferS3ID;
     private String xferS3Key;
     private String xferS3BaseKey;
+    private String xferS3Https;
+    private String xferS3AllowSelfSigned;
+    private String xferCanonicalID;
     private String s3Bucket;
     private String gridftpID;
     private String handle;
@@ -640,6 +643,30 @@ public class AllArgs {
                          sourceName);
         }
 
+        if(this.xferCanonicalID == null) {
+            this.xferCanonicalID =
+                    CloudClientUtil.getProp(props, Props.KEY_CANONICAL_ID);
+            this.gotProp(Props.KEY_CANONICAL_ID,
+                         this.xferCanonicalID,
+                         sourceName);
+        }
+
+        if(this.xferS3AllowSelfSigned == null) {
+            this.xferS3AllowSelfSigned =
+                    CloudClientUtil.getProp(props, Props.KEY_S3_ALLOW_SELF_SIGNED);
+            this.gotProp(Props.KEY_S3_ALLOW_SELF_SIGNED,
+                         this.xferS3AllowSelfSigned,
+                         sourceName);
+        }
+
+        if (this.xferS3Https == null) {
+            this.xferS3Https =
+                    CloudClientUtil.getProp(props, Props.KEY_S3_HTTPS);
+            this.gotProp(Props.KEY_S3_HTTPS,
+                         this.xferS3Https,
+                         sourceName);
+        }
+
         if (this.xferS3ID == null) {
             this.xferS3ID =
                     CloudClientUtil.getProp(props, Props.KEY_S3_ID);
@@ -1027,6 +1054,32 @@ public class AllArgs {
     public void setXferType(String xferType) {
         this.xferType = xferType;
     }
+
+    public String getXferCanonicalID() {
+        return this.xferCanonicalID;
+    }
+
+    public void setXferCanonicalID(String xferCanonicalID) {
+        this.xferCanonicalID = xferS3AllowSelfSigned;
+    }
+    
+
+    public String getXferS3AllowSelfSigned() {
+        return this.xferS3AllowSelfSigned;
+    }
+
+    public void setXferS3AllowSelfSigned(String xferS3AllowSelfSigned) {
+        this.xferS3AllowSelfSigned = xferS3AllowSelfSigned;
+    }
+
+    public String getXferS3Https() {
+        return this.xferS3Https;
+    }
+
+    public void setXferS3Https(String xferS3Https) {
+        this.xferS3Https = xferS3Https;
+    }
+
 
     public String getXferS3ID() {
         return this.xferS3ID;
