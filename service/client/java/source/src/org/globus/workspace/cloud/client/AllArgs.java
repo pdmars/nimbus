@@ -108,6 +108,8 @@ public class AllArgs {
     private String initCtxDir;
     private String kernel;
     private String localfile;
+    private String nimbusCertFile;
+    private String nimbusKeyFile;
     private int memory;
     private int cores = -1;
     private String name;
@@ -574,7 +576,7 @@ public class AllArgs {
             }
         }
 
-        this.intakeProperties(userProps, "user-supplied properties");
+        this.intakeProperties(userProps, "user-supplied properties", f.getAbsolutePath());
 
         CommonPrint.printDebugSectionEnd(this.print, sectionTitle);
     }
@@ -600,13 +602,14 @@ public class AllArgs {
             }
         }
 
-        this.intakeProperties(defaultProps, "default properties");
+        this.intakeProperties(defaultProps, "default properties", null);
 
         CommonPrint.printDebugSectionEnd(this.print, sectionTitle);
     }
 
     public void intakeProperties(Properties props,
-                                  String sourceName) throws ParameterProblem {
+                                 String sourceName,
+                                 String sourcePath) throws ParameterProblem {
 
         this.print.dbg("\nAll properties in " + sourceName + " file:\n");
         final Enumeration e = props.keys();
@@ -865,6 +868,26 @@ public class AllArgs {
             }
         }
 
+        if (this.nimbusCertFile == null) {
+            final String key = Props.KEY_NIMBUS_CERT;
+            final String val = CloudClientUtil.getProp(props, key);
+            if (val != null) {
+                final String path = resolvePathProperty(key, val, sourcePath);
+                this.nimbusCertFile = path;
+                this.gotProp(key, path, sourceName);
+            }
+        }
+
+        if (this.nimbusKeyFile == null) {
+            final String key = Props.KEY_NIMBUS_KEY;
+            final String val = CloudClientUtil.getProp(props, key);
+            if (val != null) {
+                final String path = resolvePathProperty(key, val, sourcePath);
+                this.nimbusKeyFile = path;
+                this.gotProp(key, path, sourceName);
+            }
+        }
+
         // ----
 
         if (this.metadata_association == null) {
@@ -954,7 +977,19 @@ public class AllArgs {
         }
     }
 
-    
+    private String resolvePathProperty(String key, String val, String sourcePath) {
+        File f = new File(val);
+        if (!f.isAbsolute() && sourcePath != null) {
+            f = new File(new File(sourcePath).getParent(), val);
+            String path = f.getAbsolutePath();
+            this.print.dbg("Resolved " + key + " property relative to config file: "+
+            val + " -> " + path);
+            return path;
+        }
+        return val;
+    }
+
+
     // -------------------------------------------------------------------------
     // GET/SET
     // -------------------------------------------------------------------------
@@ -1443,5 +1478,21 @@ public class AllArgs {
 
     public void setBrokerLocalNicPrefix(String brokerLocalNicPrefix) {
         this.brokerLocalNicPrefix = brokerLocalNicPrefix;
+    }
+
+    public String getNimbusCertFile() {
+        return nimbusCertFile;
+    }
+
+    public void setNimbusCertFile(String nimbusCertFile) {
+        this.nimbusCertFile = nimbusCertFile;
+    }
+
+    public String getNimbusKeyFile() {
+        return nimbusKeyFile;
+    }
+
+    public void setNimbusKeyFile(String nimbusKeyFile) {
+        this.nimbusKeyFile = nimbusKeyFile;
     }
 }

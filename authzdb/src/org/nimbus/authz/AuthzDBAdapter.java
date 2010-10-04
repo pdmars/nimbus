@@ -41,6 +41,7 @@ public class AuthzDBAdapter
 
 
     private final DataSource            dataSource;
+    private String                      cumulusPublicUser= "CumulusPublicUser";
 
     private static final Log logger =
             LogFactory.getLog(AuthzDBAdapter.class.getName());
@@ -54,6 +55,18 @@ public class AuthzDBAdapter
         }
         this.dataSource = dataSourceImpl;
     }
+
+    public String getCumulusPublicUser()
+    {
+        return cumulusPublicUser;
+    }
+
+    public void setCumulusPublicUser(
+        String                          pubUser)
+    {
+        this.cumulusPublicUser = pubUser;
+    }
+
 
     public String getCanonicalUserIdFromS3(
         String                          name)
@@ -624,6 +637,13 @@ public class AuthzDBAdapter
         }
 
     }
+
+    public String getPermissionsPublic(
+        int                             objectId)        
+            throws AuthzDBException
+    {
+        return getPermissions(objectId, this.cumulusPublicUser);
+    }
     
     public String getPermissions(
         int                             objectId,
@@ -694,6 +714,7 @@ public class AuthzDBAdapter
             {
                 throw new AuthzDBException("did not insert the row properly");
             }
+            c.commit();
         }
         catch(SQLException e)
         {

@@ -23,27 +23,81 @@ You need to have Java installed in order to run this.
 Security
 --------
 
-1. Obtain a credential.  If you do not have a proxy credential in place, you
-   can use the embedded Globus libraries to run grid-proxy-init like so:
-   
-   $ ./bin/grid-proxy-init.sh
+1. Obtain a credential.  
 
-   Issues?  Try our mailing list and/or run:
+The cloud administrator should have either provided you one or authorized your
+preexisting credential.
 
-   $ ./bin/grid-proxy-init.sh -help
+The search path the cloud client uses is as follows:
 
-   grid-proxy-init cannot find your credential's CA files?  try:
+    A. props
 
-   $ export X509_CERT_DIR="/path/to/certificates_directory"
+    If "nimbus.cert" and "nimbus.key" are in the properties file and point to
+    an unencrypted credential, they trump all.  These are not present by default
+    but allow an advanced user to easily toggle between clouds by using the
+    --conf switch. If these values are relative paths, they will be resolved
+    relative to the configuration file they are read from.
 
+    B. proxy
+  
+    If a normal proxy is present in the /tmp directory and is still valid, that
+    is  used.  This lets the cloud work with all existing certs, tooling,
+    MyProxy, etc.
 
+    Note: if you are using an encrypted key, such as the ones typically
+    provided by grid computing certificate authorities, you will need to
+    generate the proxy mentioned in this step.  See the section below.
+
+    C. ~/.nimbus/
+
+    If ~/.nimbus/usercert.pem and ~/.nimbus/userkey.pem are present and the key
+    is unencrypted, use this.  No proxy is required or created.  This is what
+    most will use.
+
+    D. ~/.globus/
+
+    Same as #3 but with ~/.globus.  The key still needs to be unencrypted.
+
+    
 2. Test the security setup.
 
    $ ./bin/cloud-client.sh --security
 
 
-3. If you have not given your DN to the cloud administrators, do so sending
-   the distinguished name printed after 'Identity:'
+3. If you already have a credential and have not given your DN to the cloud
+   administrators, do so sending the distinguished name printed after 'Identity'
+
+   
+Encrypted Keys and Proxy Credentials
+------------------------------------
+
+You might need to go the proxy credential route.  For example, you were given
+an encrypted certificate, this is typically found in grid computing.
+
+If you do not have a proxy credential in place using some other tool (at for
+example "/tmp/x509up_u1000" where "1000" is your unix account ID number), you
+can use an embedded program to run grid-proxy-init like so:
+   
+   $ ./bin/grid-proxy-init.sh
+
+Note that grid-proxy-init does not follow the same search path as the cloud
+client does when the cloud client is looking for unencrypted keys.  Instead,
+it only looks for "~/.globus/usercert.pem" and "~/.globus/userkey.pem".
+
+But you can specify the paths exactly if that is not where you keep the cert
+and encrypted key:
+
+   $ ./bin/grid-proxy-init.sh -cert /tmp/usercert.pem -key /tmp/userkey.pem
+
+Issues?  Try our mailing list and/or run:
+
+   $ ./bin/grid-proxy-init.sh -help
+
+grid-proxy-init cannot find your credential's CA files?  They are normally in 
+the "lib/certs" directory of the cloud client but you can override like so:
+
+   $ export NIMBUS_X509_TRUSTED_CERTS="/path/to/certificates_directory"
+
 
 
 Configuring The Cloud
@@ -71,6 +125,7 @@ provides settings of the University of Chicago nimbus cloud and can be
 referenced by the name "nimbus".
 
 
+
 Uploading A Workspace To The Cloud
 ----------------------------------
 
@@ -90,6 +145,7 @@ Uploading A Workspace To The Cloud
 
 There are also --download (get an image in your personal directory) and
 --delete (delete an image in your personal directory) options.
+
 
 SSH Notes
 ---------

@@ -41,8 +41,10 @@ import org.nimbustools.ctxbroker.ContextBrokerException;
 import org.globus.wsrf.Constants;
 import org.globus.wsrf.ResourceContext;
 import org.globus.wsrf.security.SecurityManager;
+import org.nimbustools.ctxbroker.rest.RestHttp;
 
 import javax.naming.InitialContext;
+import java.io.File;
 
 public class ContextBrokerServiceImpl implements ContextBrokerService {
 
@@ -57,12 +59,17 @@ public class ContextBrokerServiceImpl implements ContextBrokerService {
                         Constants.JNDI_SERVICES_BASE_NAME +
                                 BrokerConstants.CTX_BROKER_PATH + "/home";
 
+    public static final String REST_HTTP =
+                        Constants.JNDI_SERVICES_BASE_NAME +
+                                BrokerConstants.CTX_BROKER_PATH + "/rest";
+
 
     // -------------------------------------------------------------------------
     // INSTANCE VARIABLES
     // -------------------------------------------------------------------------
 
     private final ContextBrokerHome home;
+    private final RestHttp restHttp;
 
     
     // -------------------------------------------------------------------------
@@ -71,6 +78,7 @@ public class ContextBrokerServiceImpl implements ContextBrokerService {
 
     public ContextBrokerServiceImpl() throws Exception {
         this.home = discoverHome();
+        this.restHttp = discoverRestHttp();
     }
 
     protected static ContextBrokerHome discoverHome() throws Exception {
@@ -87,6 +95,28 @@ public class ContextBrokerServiceImpl implements ContextBrokerService {
             }
 
             return home;
+
+        } finally {
+            if (ctx != null) {
+                ctx.close();
+            }
+        }
+    }
+
+    protected static RestHttp discoverRestHttp() throws Exception {
+
+        InitialContext ctx = null;
+        try {
+            ctx = new InitialContext();
+
+            final RestHttp rest =
+                    (RestHttp) ctx.lookup(REST_HTTP);
+
+            if (rest == null) {
+                throw new Exception("null from JNDI for RestHttp (?)");
+            }
+
+            return rest;
 
         } finally {
             if (ctx != null) {

@@ -8,13 +8,14 @@ import org.globus.workspace.groupauthz.DecisionLogic;
 import org.globus.workspace.groupauthz.GroupRights;
 import org.globus.workspace.persistence.WorkspaceDatabaseException;
 import org.globus.workspace.service.binding.authorization.Decision;
+import org.globus.workspace.service.binding.vm.VirtualMachine;
 import org.globus.workspace.service.binding.vm.VirtualMachinePartition;
+import org.nimbustools.api.brain.NimbusHomePathResolver;
 import org.nimbustools.api.services.rm.AuthorizationException;
 import org.nimbustools.api.services.rm.ResourceRequestDeniedException;
 import org.nimbus.authz.AuthzDBAdapter;
 import org.nimbus.authz.AuthzDBException;
-
-
+import org.springframework.core.io.Resource;
 import javax.sql.DataSource;
 import java.io.File;
 import java.net.URI;
@@ -37,19 +38,29 @@ public class AuthzDecisionLogic extends DecisionLogic
     private String                      repoHost = null;
     private String                      repoDir = null;
     private boolean                     schemePassthrough;
+    private String                      passthroughSchemes = null;
 
     public  AuthzDecisionLogic(
         DataSource ds,
         String schemePassthroughStr)
     {
+        // String nh = System.getProperty(NimbusHomePathResolver.NIMBUS_HOME_ENV_NAME);
+       // might want to set default path some time
         this.authDB = new AuthzDBAdapter(ds);
         this.schemePassthrough =
                 schemePassthroughStr != null
                     && schemePassthroughStr.trim().equalsIgnoreCase("true");
     }
 
+    private String [] getPassThroughSchemeList()
+    {
+        String [] list = passthroughSchemes.split(",");
+        return list;
+    }
+
     public String translateExternaltoInternal(
-        String                          publicUrl)
+        String                          publicUrl,
+        VirtualMachine                  vm)
             throws WorkspaceException
     {
         String rc = null;
@@ -64,11 +75,18 @@ public class AuthzDecisionLogic extends DecisionLogic
             // hinge on scheme, perhaps set up fancy interface plugin decision later
             if(scheme.equals("cumulus"))
             {
-                rc = this.translateCumulus(hostport, objectname);
+                rc = this.translateCumulus(hostport, objectname, vm);
             }
             else
             {
-                rc = publicUrl;
+                String [] sl = getPassThroughSchemeList();
+                for(int i = 0; i < sl.length; i++)
+                {
+                    if(scheme.equals(sl[i]))
+                    {
+                        rc = publicUrl;
+                    }
+                }
             }
         }
         catch(Exception ex)
@@ -85,7 +103,8 @@ public class AuthzDecisionLogic extends DecisionLogic
 
     protected String translateCumulus(
         String                          hostport,
-        String                          objectName)
+        String                          objectName,
+        VirtualMachine                  vm)
             throws AuthorizationException
     {
         try
@@ -97,10 +116,12 @@ public class AuthzDecisionLogic extends DecisionLogic
                 throw new AuthorizationException("The file is not found and thus cannot be translated " + objectName);
             }
 
+            String scheme = this.getRepoScheme();
+            String rc = null;
             String dataKey = this.authDB.getDataKey(fileIds[1]);
-            String rc = this.getRepoScheme() + this.getRepoHost() + "/" + dataKey;
 
-            logger.debug("converted " + objectName + " to " + rc);
+            rc = scheme + "://" + this.getRepoHost() + "/" + dataKey;
+            logger.debug("converted " + objectName + " to " + rc + "scheme " + scheme);
 
             return rc;
         }
@@ -187,6 +208,16 @@ public class AuthzDecisionLogic extends DecisionLogic
     {
         boolean different_target = false;
         String unPropImageName = null;
+        String ownerID;
+
+        try
+        {
+            ownerID = this.authDB.getCanonicalUserIdFromDn(dn);
+        }
+        catch(AuthzDBException aex)
+        {
+            throw new AuthorizationException("Could not find the user " + dn, aex);
+        }
 
         for (int i = 0; i < parts.length; i++)
         {
@@ -198,13 +229,21 @@ public class AuthzDecisionLogic extends DecisionLogic
             }
 
             String incomingImageName = parts[i].getImage();
-            
-            if(parts[i].isPropRequired())
+
+            if(parts[i].isUnPropRequired())
             {
                 unPropImageName = parts[i].getAlternateUnpropTarget();
                 if(unPropImageName == null)
                 {
                     unPropImageName = incomingImageName;
+                    
+                    String commonPath = "/common/";
+                    if(incomingImageName.indexOf(commonPath) > 0)
+                    {
+                        // replace common path with user path
+                        String userPath = "/" + ownerID + "/";
+                        unPropImageName = unPropImageName.replaceFirst(commonPath, userPath);
+                    }                                                                        
                 }
                 else
                 {
@@ -273,24 +312,25 @@ public class AuthzDecisionLogic extends DecisionLogic
                 String bucketName = results[0];
                 String keyName = results[1];
                 boolean checkSpace = false;
+                String perms = "";
 
                 if(fileIds[0] < 0)
                 {
                     throw new ResourceRequestDeniedException("The bucket name " + bucketName + " was not found.");
-                }
-                String perms = "";
+                }                
                 if(fileIds[1] < 0 && write)
                 {
                     String dataKey = this.getRepoDir() + "/" + objectName.replace("/", "__");
                     logger.debug("Adding new datakey " + dataKey);
                     fileIds[1] = authDB.newFile(keyName, fileIds[0], canUser, dataKey, schemeType);
-                }
-                perms = authDB.getPermissions(fileIds[1], canUser);
+                }                
                 if(fileIds[1] < 0)
                 {
                     throw new ResourceRequestDeniedException("the object " + objectName + " was not found.");
                 }
-                
+
+                String pubPerms = perms + authDB.getPermissionsPublic(fileIds[1]);
+                perms = authDB.getPermissions(fileIds[1], canUser) + pubPerms;
                 int ndx = perms.indexOf('r');
                 if(ndx < 0)
                 {
@@ -319,7 +359,6 @@ public class AuthzDecisionLogic extends DecisionLogic
                         }
                     }
                 }
-
                 return size;
             }
             catch(AuthzDBException wsdbex)
@@ -370,6 +409,16 @@ public class AuthzDecisionLogic extends DecisionLogic
     public String getRepoDir()
     {
         return this.repoDir;
+    }
+
+    public void setPassthroughSchemes(String passthroughSchemes)
+    {
+        this.passthroughSchemes = passthroughSchemes;
+    }
+
+    public String getPassthroughSchemes()
+    {
+        return this.passthroughSchemes;
     }
 
     public void unpropagationFinished(

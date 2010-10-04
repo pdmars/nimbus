@@ -29,6 +29,7 @@ import org.nimbustools.api.repr.CannotTranslateException;
 import org.nimbustools.api.repr.ReprFactory;
 import org.nimbustools.api.repr.vm.ResourceAllocation;
 import org.nimbustools.api.repr.vm.VMFile;
+import org.nimbustools.api.services.rm.AuthorizationException;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.FileListing;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.ListingException;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.Repository;
@@ -69,7 +70,6 @@ public class CumulusRepository implements Repository {
     protected int repo_id = -1;
     protected String rootFileMountAs = null;
 
-
     // -------------------------------------------------------------------------
     // CONSTRUCTOR
     // -------------------------------------------------------------------------
@@ -98,6 +98,18 @@ public class CumulusRepository implements Repository {
         }
 
         this.repr = locator.getReprFactory();
+    }
+
+
+    public String getCumulusPublicUser()
+    {
+        return this.authDB.getCumulusPublicUser();
+    }
+
+    public void setCumulusPublicUser(
+        String                          pubUser)
+    {
+        this.authDB.setCumulusPublicUser(pubUser);
     }
 
     
@@ -185,8 +197,8 @@ public class CumulusRepository implements Repository {
     // implements Repository
     // -------------------------------------------------------------------------
 
-    // XXXX  not sure what to do here
-    public String getImageLocation(Caller caller)
+
+    public String getImageLocation(Caller caller, String vmname)
             throws CannotTranslateException
     {
         final String dn = caller.getIdentity();
@@ -203,10 +215,55 @@ public class CumulusRepository implements Repository {
         {
             throw new CannotTranslateException("No caller/ownerID?");
         }
+        try
+        {
+            int parentId = authDB.getFileID(this.repoBucket , -1, AuthzDBAdapter.OBJECT_TYPE_S3);
+            if (parentId < 0)
+            {
+                throw new CannotTranslateException("No such bucket " + this.repoBucket);
+            }
 
-        return "cumulus://" + this.cumulusHost + "/" + this.repoBucket + "/" + this.prefix + "/" + ownerID;
+            String userKeyName = this.prefix + "/" + ownerID;
+            String commonKeyName = this.prefix + "/common";
+            String keyName = userKeyName;
+            
+            int fileId = authDB.getFileID(userKeyName + "/" + vmname, parentId, AuthzDBAdapter.OBJECT_TYPE_S3);
+            if(fileId < 0)
+            {
+                fileId = authDB.getFileID(commonKeyName + "/" + vmname, parentId, AuthzDBAdapter.OBJECT_TYPE_S3);
+                if(fileId >= 0)
+                {
+                    keyName = commonKeyName;
+                }
+            }
+            return "cumulus://" + this.cumulusHost + "/" + this.repoBucket + "/" + keyName;
+        }
+        catch(AuthzDBException wsdbex)
+        {
+            logger.error("trouble looking up the cumulus information ", wsdbex);
+            throw new CannotTranslateException("Trouble with the database " + wsdbex.toString());
+        }
     }
 
+    public String getImageLocation(Caller caller)
+                throws CannotTranslateException
+    {
+        final String dn = caller.getIdentity();
+        String ownerID;
+        try
+        {
+            ownerID = this.authDB.getCanonicalUserIdFromDn(dn);
+        }
+        catch(AuthzDBException ex)
+        {
+            throw new CannotTranslateException(ex.toString(), ex);
+        }
+        if (ownerID == null)
+        {
+            throw new CannotTranslateException("No caller/ownerID?");
+        }
+        return "cumulus://" + this.cumulusHost + "/" + this.repoBucket + "/" + this.prefix + "/" + ownerID;
+    }
 
     public VMFile[] constructFileRequest(String imageID,
                                          ResourceAllocation ra,
@@ -240,7 +297,7 @@ public class CumulusRepository implements Repository {
             }
             else
             {
-                urlStr = getImageLocation(caller) + "/" + imageID;
+                urlStr = getImageLocation(caller, imageID) + "/" + imageID;
             }
             file.setMountAs(this.getRootFileMountAs());
             URI imageURI = new URI(urlStr);
@@ -252,6 +309,38 @@ public class CumulusRepository implements Repository {
         {
             throw new CannotTranslateException(ex);
         }                
+    }
+
+    private ArrayList objectList(List<ObjectWrapper> objList, boolean readwrite)
+    {
+        ArrayList files  = new ArrayList();
+        for (ObjectWrapper ow : objList)
+        {
+            FileListing fl = new FileListing();
+            String name = ow.getName();
+            String [] parts = name.split("/", 3);
+            if(parts.length != 3)
+            {
+                // if a bad name jsut skip this file... they may have uploaded baddness
+                logger.error("The filename " + name + " is not in the proper format");
+                continue;
+            }
+            name = parts[2];
+            fl.setName(name);
+            fl.setSize(ow.getSize());            
+
+            long tm = ow.getTime();
+            Date dt = new Date(tm);
+            Calendar cl = Calendar.getInstance();
+            cl.setTime(dt);
+            String tStr = new Integer(cl.get(Calendar.HOUR_OF_DAY)).toString() + ":" + new Integer(cl.get(Calendar.MINUTE)).toString();
+            fl.setTime(tStr);
+            String dStr = getMonthStr(cl.get(Calendar.MONTH)) + " " + new Integer(cl.get(Calendar.DAY_OF_MONTH)).toString();
+            fl.setDate(dStr);
+            fl.setReadWrite(readwrite);
+            files.add(fl);
+        }
+        return files;
     }
 
     // return a list of all the images owned by this user
@@ -275,37 +364,19 @@ public class CumulusRepository implements Repository {
         {
             String ownerID = this.authDB.getCanonicalUserIdFromDn(dn);
 
-            final ArrayList files = new ArrayList();
+            final ArrayList files;
             //String canUser = this.authDB.getCanonicalUserIdFromS3(ownerID);
             keyName = this.prefix + "/" + ownerID + '%';
+            String commonkeyName =  this.prefix + "/common/%";
 
-            final List<ObjectWrapper> objList = this.authDB.searchParentFilesByKey(this.repo_id, keyName);
-            for (ObjectWrapper ow : objList)
-            {
-                FileListing fl = new FileListing();
-                String name = ow.getName();
-                String [] parts = name.split("/", 3);
-                if(parts.length != 3)
-                {
-                    // if a bad name jsut skip this file... they may have uploaded baddness
-                    logger.error("The filename " + name + " is not in the proper format");
-                    continue;
-                }
-                name = parts[2];
-                fl.setName(name);
-                fl.setSize(ow.getSize());
+            List<ObjectWrapper> objList = this.authDB.searchParentFilesByKey(this.repo_id, keyName);
+            List<ObjectWrapper> objCommonList = this.authDB.searchParentFilesByKey(this.repo_id, commonkeyName);
 
-                long tm = ow.getTime();
-                Date dt = new Date(tm);
-                Calendar cl = Calendar.getInstance();
-                cl.setTime(dt);
-                String tStr = new Integer(cl.get(Calendar.HOUR_OF_DAY)).toString() + ":" + new Integer(cl.get(Calendar.MINUTE)).toString();
-                fl.setTime(tStr);
-                String dStr = getMonthStr(cl.get(Calendar.MONTH)) + " " + new Integer(cl.get(Calendar.DAY_OF_MONTH)).toString();
-                fl.setDate(dStr);                
-                fl.setReadWrite(true);
-                files.add(fl);
-            }
+            files = objectList(objList, true);
+            ArrayList filescommon = objectList(objCommonList, false);
+
+            files.addAll(filescommon);
+
             return (FileListing[]) files.toArray(new FileListing[files.size()]);
         }
         catch(AuthzDBException ex)

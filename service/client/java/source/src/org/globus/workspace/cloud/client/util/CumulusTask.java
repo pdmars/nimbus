@@ -210,6 +210,29 @@ class CumulusProtocolSocketFactory implements ProtocolSocketFactory
         s = psf.connectSocket(s, remote, local, null);
         return s;         
     }
+
+    /* The parent class overrides equals and hashCode to ensure that
+    all instances are considered the same. Since we are using an
+    overridden class, this breaks connection pooling within httpclient
+    as no connections are ever equal. So we override them ourselves.
+
+    From: http://hc.apache.org/httpclient-3.x/apidocs/org/apache/commons/httpclient/protocol/ProtocolSocketFactory.html
+
+    "Both Object.equals() and Object.hashCode() should be overridden
+    appropriately. Protocol socket factories are used to uniquely identify
+    Protocols and HostConfigurations, and equals() and hashCode() are required
+    for the correct operation of some connection managers."
+    */
+
+    public boolean equals(Object obj)
+    {
+        return ((obj != null) && obj.getClass().equals(CumulusProtocolSocketFactory.class));
+    }
+
+    public int hashCode()
+    {
+        return CumulusProtocolSocketFactory.class.hashCode();
+    }
 }
 
 class CumulusInputStream
@@ -242,6 +265,7 @@ class CumulusInputStream
     public void   close()
         throws java.io.IOException
     {
+        this.progress.flush();
         this.is.close();
     }
  
@@ -395,14 +419,17 @@ class CloudProgressPrinter
         bar = bar + "] " + percent + "% ";
 
         return bar;
-    }
-
+    }       
 
     public void updateBytesTransferred(
         long                            byteCount)
     {
         super.updateBytesTransferred(byteCount);
+        this.flush();
+    }
 
+    public void flush()
+    {
         long total = getBytesToTransfer();
            
         long sent = getBytesTransferred();
@@ -520,10 +547,11 @@ public class CumulusTask
         PrintStream                     debug)
             throws ExecutionProblem
     {
+        S3Service s3Service = null;
         try
         {
             String awsAccessKey = this.args.getXferS3ID();
-            S3Service s3Service = this.getService();
+            s3Service = this.getService();
 
             String baseBucketName = this.args.getS3Bucket();
 
@@ -558,6 +586,9 @@ public class CumulusTask
                 file.length(), pr, s3Object.getDataInputStream());
             s3Object.setDataInputStream(cis);
             s3Service.putObject(baseBucketName, s3Object);
+            s3Object.closeDataInputStream();
+            cis.close();
+
             if (pr != null) {
                 pr.println("\n\nDone.");
             }
@@ -572,6 +603,10 @@ public class CumulusTask
             String msg = ex1.toString() + " cause: " + ex1.getCause();
             throw new ExecutionProblem(msg, ex1);
         }
+        finally
+        {
+            this.shutdownService(s3Service);
+        }
     }
 
     public void downloadVM(
@@ -581,6 +616,7 @@ public class CumulusTask
         PrintStream                     debug)
             throws ExecutionProblem
     {
+        S3Service s3Service = null;
         try
         {
             String baseBucketName = this.args.getS3Bucket();
@@ -604,7 +640,7 @@ public class CumulusTask
 
             }
 
-            S3Service s3Service = this.getService();
+            s3Service = this.getService();
             S3Object s3Object = s3Service.getObject(baseBucketName, key);
 
             BytesProgressWatcher progressWatcher = 
@@ -624,6 +660,10 @@ public class CumulusTask
         catch(Exception s3ex)
         {
             throw new ExecutionProblem(s3ex.toString());
+        }
+        finally
+        {
+            this.shutdownService(s3Service);
         }
 
     }
@@ -658,18 +698,39 @@ public class CumulusTask
         PrintStream                     debug)
             throws ExecutionProblem
     {
+        S3Service s3Service = null;
         try
         {
-            S3Service s3Service = this.getService();
+            s3Service = this.getService();
 
             String baseBucketName = this.args.getS3Bucket();
             String keyName = this.makeKey(vmName, null);
 
-            s3Service.deleteObject(baseBucketName, keyName);
+            try
+            {
+                s3Service.deleteObject(baseBucketName, keyName);
+            }
+            catch(S3ServiceException s3ex)
+            {                
+                if(s3ex.getResponseCode() == 404)
+                {
+                    keyName = this.makeKey(vmName, "common");
+                    s3Service.deleteObject(baseBucketName, keyName);
+                }
+                else
+                {
+                    throw new ExecutionProblem(s3ex.toString());
+                }
+            }
+
         }
         catch(S3ServiceException s3ex)
         {
             throw new ExecutionProblem(s3ex.toString());
+        }
+        finally
+        {
+            this.shutdownService(s3Service);
         }
 
     }
@@ -725,9 +786,93 @@ public class CumulusTask
             j3p,
             hc);
 
-        return s3Service;
+        return s3Service;                                           
     }
 
+    private void shutdownService(S3Service service)
+    {
+        // best effort cleanup
+        try {
+            if (service != null)
+            {
+                service.shutdown();
+            }
+        } catch (S3ServiceException ignored) {
+        }
+    }
+
+    private boolean keyExists(
+        S3Service                   s3Service,
+        String                      baseBucketName,
+        String                      keyName)
+            throws S3ServiceException
+    {
+        boolean exists = false;
+        try
+        {
+            exists = s3Service.isObjectInBucket(baseBucketName, keyName);
+        }
+        catch(S3ServiceException s3ex)
+        {
+            if(s3ex.getResponseCode() == 404)
+            {
+                exists = false;
+            }
+            else
+            {
+                throw s3ex;
+            }
+        }
+        return exists;
+    }
+
+    public String getImagePath(
+            String                      vmName)
+                throws ExecutionProblem
+    {
+        String baseBucketName;
+        String keyNameOwner;
+        S3Service s3Service = null;
+        try
+        {
+            s3Service = this.getService();
+            int ndx = vmName.indexOf("cumulus://");
+            if(ndx >= 0)
+            {
+                return vmName;
+            }
+            else
+            {
+                baseBucketName = this.args.getS3Bucket();
+                // first check to see if the owner has the image
+                keyNameOwner = this.makeKey(vmName, null);
+            
+                boolean exists = this.keyExists(s3Service, baseBucketName, keyNameOwner);
+                if(exists)
+                {
+                    return keyNameOwner;
+                }
+                // if not found check to see if the image is in the common space
+                String keyNameCommon = this.makeKey(vmName, "common");
+                exists = this.keyExists(s3Service, baseBucketName, keyNameCommon);
+                if(exists)
+                {
+                    return keyNameCommon;
+                }
+                // if the image still is not found it may be a new image, in which case return the
+                // owner name
+                return keyNameOwner;
+            }
+         }
+        catch(S3ServiceException s3ex)
+        {
+            throw new ExecutionProblem(s3ex.toString());
+        }
+        finally
+        {
+            this.shutdownService(s3Service);
+        }
+    }
 
     public FileListing[] listFiles(
         PrintStream                     info,
@@ -735,9 +880,10 @@ public class CumulusTask
         PrintStream                     debug) 
               throws ExecutionProblem 
     {
+        S3Service s3Service = null;
         try
         {
-            S3Service s3Service = this.getService();
+            s3Service = this.getService();
 
             String baseBucketName = this.args.getS3Bucket();
             String keyName = this.makeKey("", null);
@@ -754,6 +900,10 @@ public class CumulusTask
         catch(S3ServiceException s3ex)
         {
             throw new ExecutionProblem(s3ex.toString());
+        }
+        finally
+        {
+            this.shutdownService(s3Service);
         }
     }
 
@@ -794,7 +944,7 @@ public class CumulusTask
     private String convertDate(
         Calendar                        cal)
     {
-        int m = cal.get(Calendar.MONTH);
+        int m = cal.get(Calendar.MONTH) + 1;
         int d = cal.get(Calendar.DAY_OF_MONTH);
         int y = cal.get(Calendar.YEAR);
 

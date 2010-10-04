@@ -40,6 +40,16 @@ def get_nimbus_home():
 
 class TestEC2Submit(unittest.TestCase):
 
+    def killall_running(self):
+	instances = self.ec2conn.get_all_instances()
+        print instances
+        for reserv in instances:
+            for inst in reserv.instances:
+                if inst.state == u'running':
+                    print "Terminating instance %s" % inst
+                    inst.stop()
+
+
     def cb_random_bucketname(self, len):
         chars = string.letters + string.digits
         newpasswd = ""
@@ -52,24 +62,24 @@ class TestEC2Submit(unittest.TestCase):
         cumport = 8888
         ec2port = 8444
         self.db = DB(pycb.config.authzdb)
-        self.friendly = self.cb_random_bucketname(21)
-        self.can_user = User(self.db, friendly=self.friendly, create=True)
-        self.subject = self.cb_random_bucketname(21)
-        self.s3id = self.cb_random_bucketname(21)
-        self.s3pw = self.cb_random_bucketname(42)
-        self.s3user = self.can_user.create_alias(self.s3id, pynimbusauthz.alias_type_s3, self.friendly, self.s3pw)
-        self.dnuser = self.can_user.create_alias(self.subject, pynimbusauthz.alias_type_x509, self.friendly)
+        self.friendly = os.environ['NIMBUS_TEST_USER']
+        self.can_user = User.get_user_by_friendly(self.db, self.friendly)
+        s3a = self.can_user.get_alias_by_friendly(self.friendly, pynimbusauthz.alias_type_s3)
+        x509a = self.can_user.get_alias_by_friendly(self.friendly, pynimbusauthz.alias_type_x509)
 
-        self.ec2conn = EC2Connection(self.s3id, self.s3pw, host=host, port=ec2port, debug=2)
+        self.subject = x509a.get_name()
+        self.s3id = s3a.get_name()
+        self.s3pw = s3a.get_data()
+        self.s3user = s3a
+        self.dnuser = x509a
+
+        self.ec2conn = EC2Connection(self.s3id, self.s3pw, host=host, port=ec2port)
         self.ec2conn.host = host
 
         cf = OrdinaryCallingFormat()
         self.s3conn = S3Connection(self.s3id, self.s3pw, host=host, port=cumport, is_secure=False, calling_format=cf)
         self.db.commit()
-
-        nh = get_nimbus_home()
-        groupauthz_dir = os.path.join(nh, "services/etc/nimbus/workspace-service/group-authz/")
-        add_member(groupauthz_dir, self.subject, 4)
+        self.killall_running()
 
 
     def tearDown(self):
@@ -77,14 +87,9 @@ class TestEC2Submit(unittest.TestCase):
             pass
         if self.ec2conn != None:
             pass
-        if self.s3user != None:
-            self.s3user.remove()
-        if self.dnuser != None:
-            self.dnuser.remove()
-        if self.can_user != None:
-            self.can_user.destroy_brutally()
         if self.db != None:
             self.db.close()
+        self.killall_running()
 
 
     def test_ec2_submit_name_format(self):
@@ -94,8 +99,13 @@ class TestEC2Submit(unittest.TestCase):
         k.key = "VMS/" + self.can_user.get_id() + "/" + image_name
         k.set_contents_from_filename("/etc/group")
         image = self.ec2conn.get_image(image_name)
+        print "==================================="
+        print image.name
+        print image.location
+        print image_name
+        print "==================================="
+
         res = image.run() 
-        dir(res)
         res.stop_all()
 
     def test_ec2_submit_url(self):
@@ -109,3 +119,5 @@ class TestEC2Submit(unittest.TestCase):
         print url
         res = self.ec2conn.run_instances(url)
         res.stop_all()
+
+

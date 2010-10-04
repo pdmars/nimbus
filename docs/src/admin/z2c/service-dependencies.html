@@ -1,5 +1,5 @@
 m4_include(/mcs/m4/worksp.lib.m4)
-_NIMBUS_HEADER(2.5RC1 Zero To Cloud Guide)
+_NIMBUS_HEADER(2.5 Zero To Cloud Guide)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_LEFT2_COLUMN
 _NIMBUS_LEFT2_Z2C_SIDEBAR(y)
@@ -30,13 +30,18 @@ $ javac -version
     Note that OpenJDK is not supported.
 </p>
 
-<h3>Python 2.5 or later</h3>
+<h3>Python 2.5 or later (but not 3.x)</h3>
 <p>
     You can check the version of your system Python with this command:
 </p>
 <pre class="panel">
-$ python --version
+$ python -V
 </pre>
+
+<p>
+    Note that Nimbus does not support the Python 3 development branch at this time. The most recent compatible Python
+    version is 2.7.
+</p>
 <p>
     If you cannot safely upgrade the system Python, you can use an alternate location such as
     <tt class="literal">/usr/local/bin/python2.5</tt>.

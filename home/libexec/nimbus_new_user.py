@@ -4,6 +4,13 @@
 Creates new Nimbus users.  It will create all needed user aliases (Cumulus,
 x509, and web login id)
 """
+import sys
+try:
+    import pycb
+except Exception, ex:
+    print ex
+    print "Error:  please verify that your cumulus.ini file points the correct database"
+    sys.exit(1)
 from nimbusweb.setup import autoca
 import string
 import random
@@ -13,7 +20,6 @@ import sys
 import ConfigParser
 from ConfigParser import SafeConfigParser
 import time
-import pycb
 import pycb.tools
 import pynimbusauthz
 import tempfile
@@ -186,6 +192,8 @@ Create/edit a nimbus user
 
     opt = cbOpts("dn", "s", "This is used when the user already has a cert.  This option will use the given DN instead of generating a new cert", None)
     all_opts.append(opt)
+    opt = cbOpts("canonical_id", "i", "Specify the canonical ID string to user for this new user.  If the ID already exists an error will be returned.", None)
+    all_opts.append(opt)
     opt = cbOpts("cert", "c", "Instead of generating a new key pair use this certificate.  This must be used with the --key option", None)
     all_opts.append(opt)
     opt = cbOpts("key", "k", "Instead of generating a new key pair use this key.  This must be used with the --cert option", None)
@@ -198,7 +206,7 @@ Create/edit a nimbus user
     all_opts.append(opt)
     opt = cbOpts("dest", "d", "The directory to put all of the new files into.", None)
     all_opts.append(opt)
-    opt = cbOpts("group", "g", "Put this user in the given group", "01", vals=("01", "02", "03", "04"))
+    opt = cbOpts("group", "g", "Put this user in the given group", "01")
     all_opts.append(opt)
     opt = cbOpts("web_id", "w", "Set the web user name.  If not set and a web user is desired a username will be created from the email address.", None)
     all_opts.append(opt)
@@ -246,7 +254,6 @@ Create/edit a nimbus user
     if o.dn != None and o.nocert:
         raise CLIError('ECMDLINE', "why specify a dn and use nocert?")
 
-    o.canonical_id = None
     o.url = None
     o.cloud_properties = None
 
@@ -284,7 +291,15 @@ def create_user(o, db):
         if user != None:
             raise CLIError('EUSER', "The user already exists: %s" % (o.emailaddr))
 
-        user = User(db, friendly=o.emailaddr)
+        if o.canonical_id != None:
+            user = User.get_user(db, o.canonical_id)
+            if user != None:
+                raise CLIError('EUSER', "The canonical user already exists: %s" % (o.canonical_id))
+
+            user = User(db, friendly=o.emailaddr, uu=o.canonical_id, create=True)
+        else:
+            user = User(db, friendly=o.emailaddr, create=True)
+
         o.canonical_id = user.get_id()
         if not o.noaccess:
             if o.access_id == None:
@@ -355,9 +370,15 @@ def do_group_bidnes(o):
     nh = get_nimbus_home()
     groupauthz_dir = os.path.join(nh, "services/etc/nimbus/workspace-service/group-authz/")
     if o.group:
-        add_member(groupauthz_dir, o.dn, int(o.group))
+        try:
+            add_member(groupauthz_dir, o.dn, o.group)
+        except InvalidGroupError:
+            raise CLIError('EUSER', "Authz group '%s' does not exist" % o.group)
     else:
-        add_member(groupauthz_dir, o.dn)
+        try:
+            add_member(groupauthz_dir, o.dn)
+        except InvalidGroupError, e:
+            raise CLIError('EUSER', "Problem adding user to default authz group: " + str(e))
 
 def report_results(o, db):
     user = User.get_user_by_friendly(db, o.emailaddr)

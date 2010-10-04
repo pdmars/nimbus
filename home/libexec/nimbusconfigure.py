@@ -34,6 +34,7 @@ services.enabled: True
 services.wait: 10
 web.enabled: False
 cumulus.enabled: True
+lantorrent.enabled: False
 """
 CONFIG_STATE_PATH = 'nimbus-setup.conf'
 
@@ -447,10 +448,11 @@ class NimbusSetup(object):
         lines.append("\n")
         
         lines.append("cumulus.authz.db=%s\n" % cumulus_authz_db)
-        lines.append("cumulus.repo.dir=$NIMBUS_HOME/cumulus/posixdata\n")
+        lines.append("cumulus.repo.dir=%s/cumulus/posixdata\n" % (self.basedir))
         lines.append("cumulus.host=%s\n" % self['hostname'])
         lines.append("cumulus.repo.bucket=%s\n" % repo_bucket)
         lines.append("cumulus.repo.prefix=VMS\n")
+        lines.append("cumulus.publicuser=CumulusPublicUser\n")
         
         cumulus_conf_path = os.path.join(self.gtdir, 'etc/nimbus/workspace-service/cumulus.conf')
         f = None
@@ -559,12 +561,16 @@ class NimbusSetup(object):
                 self.gtdir, log)
 
         # and context broker
-        gtcontainer.adjust_broker_config(ca_cert, ca_key, self.webdir,
-                self.gtdir, log)
+        gtcontainer.adjust_broker_config(ca_cert, ca_key, self.keystore_path,
+                password, self.webdir, self.gtdir, log)
 
         # run the web newconf script, if enabled
         if self.config.getboolean(CONFIGSECTION, 'web.enabled'):
             ret = os.system(os.path.join(self.webdir, 'sbin/new-conf.sh'))
+            configured = pathutil.pathjoin(self.webdir, ".nimbusconfigured")
+            if not os.path.isfile(configured):
+                open(configured, "a")
+                
 
         # write an enviroment file
         self.write_env_file()

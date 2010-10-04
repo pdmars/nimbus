@@ -44,8 +44,8 @@ if [ "X$2" == "X" ]; then
         exit 1
     fi
 
-    PYVEDIR=$installdir
     PYVE=$installdir/bin/python
+    PYVEDIR=$installdir
     PIP=$installdir/bin/pip
 else
     use_py=$2
@@ -62,19 +62,34 @@ else
         echo "ERROR: Your system must have Python version 2.5 or later."
         exit 1
     fi
-
 fi
+
+source $PYVEDIR/bin/activate
 
 cd $source_dir/deps
 if [ $? -ne 0 ]; then
     echo "Could not change to the deps directory"
     exit 1
 fi
-
 ./get-em.sh
 if [ $? -ne 0 ]; then
     echo "get-em failed"
     exit 1
+fi
+
+if [ ! -e $PIP ]; then
+    cd $source_dir
+    tar -zxf pip-0.7.2.tar.gz
+    if [ $? -ne 0 ]; then
+        echo "unable to untar pip-0.7.2.tar.gz"
+        exit 1
+    fi
+    cd $source_dir/pip-0.7.2
+    $PYVE setup.py install
+    if [ $? -ne 0 ]; then
+        echo "pip was not installed correctly"
+        exit 1
+    fi
 fi
 
 echo ""
@@ -89,6 +104,25 @@ if [ $? -ne 0 ]; then
     echo "$PIP failed to install deps"
     exit 1
 fi
+
+echo "installing authz"
+echo "----------------"
+cd authz
+$PYVE setup.py install
+if [ $? -ne 0 ]; then
+    echo "$PIP failed to install authz"
+    exit 1
+fi
+cd $source_dir
+echo "installing cb"
+echo "-------------"
+cd cb
+$PYVE setup.py install
+if [ $? -ne 0 ]; then
+    echo "$PIP failed to install authz"
+    exit 1
+fi
+
 
 echo ""
 echo "-----------------------------------------------------------------"
