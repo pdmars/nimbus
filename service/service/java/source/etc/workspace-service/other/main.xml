@@ -600,6 +600,28 @@
     </bean>
 
     <!-- ===================================================================
+         Remoting related
+         =================================================================== -->
+
+    <bean id="nimbus-remoting-server"
+          class="org.globus.workspace.remoting.RemotingServer"
+          init-method="initialize">
+        <property name="socketResource" value="$ADMIN{socket.dir}" />
+        <property name="bindings">
+            <map>
+                <entry key="$ADMIN{rmi.binding.nodemgmt}"
+                       value-ref="nimbus-remoting-nodemgmt" />
+            </map>
+        </property>
+    </bean>
+
+    <bean id="nimbus-remoting-nodemgmt"
+          class="org.globus.workspace.remoting.admin.defaults.DefaultRemoteNodeManagement"
+            init-method="initialize">
+        <property name="nodeManagement" ref="nimbus-rm.scheduler.SlotManagement"/>
+    </bean>
+
+    <!-- ===================================================================
          Externally written classes that are brought in as beans
          =================================================================== -->
 
@@ -628,7 +650,9 @@
         
         <property name="maxActive" value="10" />
         <property name="maxIdle" value="4" />
-        <property name="maxWait" value="2000" />
+
+        <!-- ms to wait for database connection, 0 signals infinite -->
+        <property name="maxWait" value="0" />
         <property name="poolPreparedStatements" value="true" />
         <property name="driverClassName"
                   value="org.apache.derby.jdbc.EmbeddedDriver" />

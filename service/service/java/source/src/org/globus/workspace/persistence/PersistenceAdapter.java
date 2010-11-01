@@ -150,23 +150,25 @@ public interface PersistenceAdapter {
 
             throws WorkspaceDatabaseException;
 
-    public void replaceResourcepools(Hashtable resourcepools)
-
-            throws WorkspaceDatabaseException;
-
-    public void replaceResourcepoolEntry(ResourcepoolEntry entry)
-
-            throws WorkspaceDatabaseException;
-
-    public Hashtable currentResourcepools()
-
-            throws WorkspaceDatabaseException;
-
-    public Hashtable currentResourcepools(boolean cachedIsFine)
+    public void updateResourcepoolEntryAvailableMemory(String hostname, int newAvailMemory)
 
             throws WorkspaceDatabaseException;
 
     public int memoryUsedOnPoolnode(String poolnode)
+
+            throws WorkspaceDatabaseException;
+
+    public List<ResourcepoolEntry> currentResourcepoolEntries() throws WorkspaceDatabaseException;
+
+    public ResourcepoolEntry getResourcepoolEntry(String hostname)
+
+            throws WorkspaceDatabaseException;
+
+    public void addResourcepoolEntry(ResourcepoolEntry entry)
+
+            throws WorkspaceDatabaseException;
+
+    public boolean removeResourcepoolEntry(String hostname)
 
             throws WorkspaceDatabaseException;
 
@@ -194,6 +196,13 @@ public interface PersistenceAdapter {
     
     public List<ResourcepoolEntry> getAvailableEntriesSortedByFreeMemoryPercentage(int requestedMem) 
     
-            throws WorkspaceDatabaseException;    
+            throws WorkspaceDatabaseException;
 
+    boolean updateResourcepoolEntry(String hostname,
+                                        String pool,
+                                        String networks,
+                                        Integer memoryMax,
+                                        Integer memoryAvail,
+                                        Boolean active)
+            throws WorkspaceDatabaseException;
 }

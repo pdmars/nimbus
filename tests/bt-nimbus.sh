@@ -5,6 +5,7 @@ unset SSH_AUTH_SOCK
 
 work_dir=$1
 clean_up=$2
+run_tests=$3
 bkdate=`date +%s`
 function on_exit()
 {
@@ -40,7 +41,8 @@ mv $HOME/.s3cfg $HOME/.s3cfg.$bkdate
 trap on_exit EXIT
 echo "Building a Nimbus env at $work_dir"
 ./make-test-env.sh $work_dir | tee bandt.log
-if [ $? -ne 0 ]; then
+if [ $PIPESTATUS -ne 0 ]; then
+    cat $NIMBUS_HOME/var/services.log
     echo "nimbus install failed"
     exit 1
 fi
@@ -53,6 +55,10 @@ echo "========================================="
 echo "Starting the services"
 echo "========================================="
 cd $NIMBUS_HOME
+
+# change fake mode
+sed -i 's/fake.mode=true/fake.mode=false/' ./services/etc/nimbus/workspace-service/other/common.conf
+
 pkill cumulus
 ./bin/nimbusctl restart
 if [ $? -ne 0 ]; then
@@ -67,9 +73,12 @@ echo "Run tests...."
 echo "========================================="
 cd $src_dir
 
-./bt-tests.sh
-rc=$?
-
+if [ "X$run_tests" != "Xno" ]; then
+    ./bt-tests.sh
+    rc=$?
+else
+    rc=0
+fi
 $NIMBUS_HOME/bin/nimbusctl stop
 exit $rc
 

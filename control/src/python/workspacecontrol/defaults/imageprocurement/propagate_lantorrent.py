@@ -102,7 +102,11 @@ class LantorrentPropadapter(propagate_scp.propadapter):
         if lt_exe == None:
             raise InvalidInput("the prop-extra-args parameter must be used and be a path to the remote execution script")
 
-        up = urlparse.urlparse(url)
+        
+        parts = url.split('://', 1)
+        fake_url = "http://" + parts[1] 
+        up = urlparse.urlparse(fake_url)
+
         xfer_host = up.hostname
         xfer_user = up.username
         xfer_port = int(up.port)

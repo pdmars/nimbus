@@ -36,7 +36,7 @@ If file is not specified, standard input will be used"""
             flag=True)
     all_opts.append(opt)
 
-    opt = cbOpts('delim', 'D', 'Charactor between columns of input data', ',')
+    opt = cbOpts('delim', 'D', 'Character between columns of input data', ',')
     all_opts.append(opt)
     
     #opt = cbOpts('fields', 'f', 'Specify field order in output, from the following: '+
@@ -79,6 +79,8 @@ def read_users(input, delimiter=',', fields=_fields):
         u = dict([(k, v) for k, v in izip(fields, row)])
 
         name = u['display_name']
+        grp = _fix_group(u['group'])
+        u['group'] = grp
         if name in users:
             raise CLIError('EUSER', 'Duplicate entry present for user "%s"' % name)
         users[name] = u

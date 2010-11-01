@@ -9,9 +9,9 @@ if [ "X$1" == "X" ]; then
     exit 1
 fi
 
-echo "---------------------"
-echo "installing lantorrent"
-echo "---------------------"
+echo "-----------------------------------------------------------------"
+echo " Installing LANTorrent"
+echo "-----------------------------------------------------------------"
 
 src_dir=`dirname $0`
 cd $src_dir
@@ -28,7 +28,8 @@ cd $installdir
 installdir=`pwd`
 
 
-echo "copying from $src_dir to $installdir"
+echo ""
+echo "Copying from $src_dir to $installdir"
 cp -r $src_dir/* $installdir/
 rc=$?
 if [ $rc -ne 0 ]; then
@@ -43,12 +44,12 @@ if [ $rc -ne 0 ]; then
     exit $rc
 fi
 
-rm etc/req.db
+rm -f etc/req.db
 sqlite3 etc/req.db  < etc/lt.sql
 rc=$?
 if [ $rc -ne 0 ]; then
     echo "could not create the database"
     exit $rc
 fi
-echo "Success"
+echo "Success."
 exit 0

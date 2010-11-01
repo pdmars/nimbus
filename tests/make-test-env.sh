@@ -47,6 +47,10 @@ if [ "X$NIMBUS_REPO" != "X" ]; then
 fi
 echo "Checking out nimbus from $repo"
 git clone --depth 1 $repo
+if [ $? -ne 0 ]; then
+    echo "failed to checkout git from $NIMBUS_REPO"
+    exit 1
+fi
 
 install_dir=$work_dir/NIMBUSINSTALL
 
@@ -116,13 +120,14 @@ aid=`echo $user_stuff | awk -F , '{ print $4 }'`
 apw=`echo $user_stuff | awk -F , '{ print $5 }'` 
 
 sed -e "s^@ID@^$aid^" -e "s/@KEY@/$apw/" $src_dir/s3cfg.in > $HOME/.s3cfg
+cat $HOME/.s3cfg
 
 echo "========================================="
 echo "Making a new user"
 echo "========================================="
 
 user_name="nimbus@$RANDOM"
-user_stuff=`$install_dir/bin/nimbus-new-user --group 04 --batch -r cloud_properties,cert,key,access_id,access_secret $user_name`
+user_stuff=`$install_dir/bin/nimbus-new-user --group 04 --batch -r cloud_properties,cert,key,access_id,access_secret,canonical_id $user_name`
 
 echo $user_stuff
 cp=`echo $user_stuff | awk -F , '{ print $1 }'` 
@@ -130,8 +135,9 @@ cert=`echo $user_stuff | awk -F , '{ print $2 }'`
 key=`echo $user_stuff | awk -F , '{ print $3 }'` 
 aid=`echo $user_stuff | awk -F , '{ print $4 }'` 
 apw=`echo $user_stuff | awk -F , '{ print $5 }'` 
+can_id=`echo $user_stuff | awk -F , '{ print $6 }'` 
 
-cat $HOME/.s3cfg
+sed -e "s^@ID@^$aid^" -e "s/@KEY@/$apw/" $src_dir/s3cfg.in > $HOME/.s3cfg.reg
 
 echo $cp
 echo $cert
@@ -151,7 +157,62 @@ ls -l $HOME/.globus/
 
 ./bin/grid-proxy-init.sh
 
-echo "localhost 10240" >> $install_dir/services/etc/nimbus/workspace-service/vmm-pools/testpool
+echo "========================================="
+echo "Setting up VMM and network pools"
+echo "========================================="
+
+#sed -i 's^socket.dir=$NIMBUS_HOME/var/run/privileged/^socket.dir=//tmp^' $install_dir/services/etc/nimbus/workspace-service/admin.conf
+#if [ $? -ne 0 ]; then
+#    echo "failed to sed admin file"
+#    exit 1
+#fi
+
+
+$install_dir/bin/nimbusctl services start
+if [ $? -ne 0 ]; then
+    echo "Starting Nimbus services failed"
+    exit 1
+fi
+sleep 15 # make sure it is really started, uhhhhh
+echo "trying $install_dir/bin/nimbusctl services status"
+$install_dir/bin/nimbusctl services status
+if [ $? -ne 0 ]; then
+    echo "Starting Nimbus services failed"
+    cat $install_dir/var/services.log
+    cat $install_dir/var/cumulus.log
+    exit 1
+fi
+
+done=1
+try_count=0
+while [ $done -ne 0 ];
+do
+    $install_dir/bin/nimbus-nodes --add localhost --memory 10240
+    if [ $? -eq 0 ]; then
+        done=0
+    else
+        try_count=`expr $try_count + 1`
+     
+        if [ $try_count -gt 10 ]; then
+            echo "Adding VMM node failed"
+            cat $install_dir/var/services.log
+            cat $install_dir/var/cumulus.log
+            ls -l $install_dir/var/
+            exit 1
+        fi
+        sleep 30
+    fi
+done
+
+$install_dir/bin/nimbusctl services stop
+if [ $? -ne 0 ]; then
+    echo "Stopping Nimbus services failed"
+    exit 1
+fi
+
+
+cp $src_dir/public  $install_dir/services/etc/nimbus/workspace-service/network-pools/public
+
 
 echo $work_dir
 export NIMBUS_HOME=$install_dir
@@ -162,10 +223,12 @@ echo "NIMBUS_HOME:          $NIMBUS_HOME"
 echo "NIMBUS_TEST_USER:     $NIMBUS_TEST_USER"
 echo "CLOUD_CLIENT_HOME:    $CLOUD_CLIENT_HOME"
 echo "NIMBUS_WORKSPACE_CONTROL_HOME:          $NIMBUS_WORKSPACE_CONTROL_HOME"
+echo "NIMBUS_TEST_USER_CAN_ID:          $can_id"
 
 
 echo "export NIMBUS_HOME=$NIMBUS_HOME" > $src_dir/env.sh
 echo "export NIMBUS_TEST_USER=$NIMBUS_TEST_USER" >> $src_dir/env.sh
 echo "export CLOUD_CLIENT_HOME=$CLOUD_CLIENT_HOME" >> $src_dir/env.sh
 echo "export NIMBUS_WORKSPACE_CONTROL_HOME=$NIMBUS_WORKSPACE_CONTROL_HOME" >> $src_dir/env.sh
+echo "export NIMBUS_TEST_USER_CAN_ID=$can_id" >> $src_dir/env.sh
 

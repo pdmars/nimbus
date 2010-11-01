@@ -7,7 +7,7 @@ _NIMBUS_LEFT2_ABOUT_SIDEBAR(n,y,n,n)
 
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_2_5_DEPRECATED
+_NIMBUS_2_6_DEPRECATED
 
 <h2>Frequently Asked Questions</h2>
 
@@ -90,6 +90,9 @@ _NIMBUS_2_5_DEPRECATED
     </li>
     <li>
         <a href="#cumulusbackend">What type of storage system backs the Cumulus repository</a>?
+    </li>
+    <li>
+        <a href="#lantorrent">What is LANTorrent</a>?
     </li>
     <li>
         <a href="#license">How is the software licensed</a>?
@@ -878,6 +881,34 @@ HDFS (under a FUSE module).  We have prototyped HDFS and BlobSeer plugins
 and we will be releasing them soon.
         </p>
     </li>
+
+    <li>
+        <p>
+            <a name="lantorrent"> </a>
+            <b>What is LANTorrent? _NAMELINK(lantorrent)</b>
+        </p>
+
+        <p>
+LANTorrent is a file distribution protocol integrated into the Nimbus
+IaaS toolkit.  It works as a means to multi-cast virtual machine images
+to many backend nodes.  The protocol is optimized for propagating
+virtual machine images (typically large files) from a central repository
+across a LAN to many virtual machine monitor nodes.
+        </p>
+    </li>
+
+    <li>
+        <p>
+            <a name="lantorrentenable"> </a>
+            <b>How do I enable LANTorrent? _NAMELINK(lantorrentenable)</b>
+        </p>
+
+        <p>
+See the document: 
+<a href="admin/reference.html#lantorrent"><b>here</b></a>.
+        </p>
+    </li>
+
 
     <li>
         <p>

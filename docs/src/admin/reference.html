@@ -1,13 +1,13 @@
 m4_include(/mcs/m4/worksp.lib.m4)
-_NIMBUS_HEADER(2.5 Admin Reference)
+_NIMBUS_HEADER(2.6 Admin Reference)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_LEFT2_COLUMN
 _NIMBUS_LEFT2_ADMIN_SIDEBAR(n,n,y,n,n)
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_2_5_DEPRECATED
+_NIMBUS_2_6_DEPRECATED
 
-<h2>Nimbus 2.5 Admin Reference</h2>
+<h2>Nimbus 2.6RC2 Admin Reference</h2>
 
 <p>
     This section explains some side tasks as well as some
@@ -144,6 +144,22 @@ _NIMBUS_2_5_DEPRECATED
         </ul>
     </li>
 
+    <li>
+        <p>
+            <a href="#lantorrent">LANTorrent</a>
+        </p>
+        <ul>
+            <li>
+                <a href="#lantorrent-protocol">Protocol</a>
+            </li>
+            <li>
+                <a href="#lantorrent-config">Configuration</a>
+            </li>
+        </ul>
+    </li>
+
+
+
 </ul>
 
 <!-- *********************************************************************** -->
@@ -192,7 +208,7 @@ _NIMBUS_2_5_DEPRECATED
 </p>
 
 <p>
-    In the Nimbus 2.5 release the repository service (<a href="#cumulus">Cumulus</a>) and the IaaS services
+    In the Nimbus 2.6RC2 release the repository service (<a href="#cumulus">Cumulus</a>) and the IaaS services
     MUST be on the same node.  In future releases this restriction will
     be lifted.
 </p>
@@ -1239,42 +1255,10 @@ service.sshd.contact.string=REPLACE_WITH_SERVICE_NODE_HOSTNAME:22</pre>
 
 
 <h4>* VMM names:</h4>
-<p>
-    Navigate to the workspace service VMM pools directory:
-</p>
-
-_EXAMPLE_CMD_BEGIN
-cd $NIMBUS_HOME/services/etc/nimbus/workspace-service/vmm-pools
-_EXAMPLE_CMD_END
 
 <p>
-    Each file in this directory represents a distinct pool of VMM nodes that
-    are available for the service to run VMs on.  Leave this as one pool (one
-    file, the example file).
+    See the <a href="#resource-pool">resource pool</a> section to learn how to add VMM names.
 </p>
-
-<p>
-    Edit the example "pool1" file to list only one test VMM node, the node
-    where you installed Xen above.  List the amount of memory you would like
-    allocated to the guest VMs.
-</p>
-
-
-<div class="screen"><pre>
-some-vmm-node 1024</pre>
-</div>
-
-<p>
-    You can SSH there without password from the nimbus account, right?
-</p>
-
-_EXAMPLE_CMD_BEGIN
-ssh some-vmm-node
-_EXAMPLE_CMD_END
-
-<div class="screen"><pre>
-nimbus@some-vmm-node $ ...</pre>
-</div>
 
 <a name="networks"> </a>
 <h4>* Networks:</h4>
@@ -1363,65 +1347,89 @@ fakepub1 192.168.0.3 192.168.0.1 192.168.0.255 255.255.255.0</pre>
     This is the default, see the <a href="#resource-pool-and-pilot">overview</a>.
 </p>
 
+
 <p>
-    A directory of files is located at
-    "services/etc/nimbus/workspace-service/<b>vmm-pools</b>/"
-</p>
-<p>
-   The pool file format is currently simple: for each node in the pool,
-   list the hostname and the amount of RAM it can spare for running guest VMs.
-</p>
-<p>
-   Optionally, you can also specify that certain hosts can only
-   support a subset of the available networks (see the
-   file comments for syntax).
-</p>
-<p>
-   If you change these configuration files after starting the
-   container, only a fresh container reboot will actually incur the
-   changes.
+    In the <a href="z2c/index.html">Zero to Cloud Guide</a>, the configuration script that you interacted with at end of the <a href="z2c/ssh-setup.html">SSH Setup</a> section took care of configuring the workspace service with the first VMM to use.
 </p>
 
-<ul>
+<p>
+    A cloud with one VMM is perfectly reasonable for a test setup, but when it comes time to offer resources to others for real use, we bet you might want to add a few more.  Maybe a few hundred more.
+</p>
 
-    <li>
-        If you <b>add</b> a node, this will be available
-        immediately after the container reboot.
-    </li>
+<p>
+    As of Nimbus 2.6, it is possible to configure the running service dynamically.  You can interact with the scheduler and add and remove nodes on the fly.  The <tt class="literal">nimbus-nodes</tt> program is what you use to do this.
+</p>
 
-    <li>
-        If you <b>remove</b> a node that is currently
-        in use, no new deployments will be mapped to this VMM.
-        However, this will not destroy (or migrate) any current VMs
-        running there.  If that is necessary it currently needs to be
-        accomplished explicitly.
-    </li>
+<p>
+    Have a look at the help output:
+</p>
 
-    <li>
-        If you <b>change</b> a node that is currently
-        in use, the change will take effect for the next lease.
+<div class="screen"><pre>
+cd $NIMBUS_HOME
+./bin/nimbus-nodes -h</pre>
+</div>
 
-        <p>
-        If you've removed support for an association on a VMM that
-        the current VM(s) is using, this change will not destroy (or
-        migrate) the VM(s) to adjust to this restriction.
-        If that is necessary it currently needs to be accomplished
-        explicitly.
-        </p>
+<p>
+    The following example assumes you have homogenous nodes.  Each node has, let's say, 8GB RAM and you want to dedicate the nodes exclusively to hosting VMs.  Some RAM needs to be saved for the system (in Xen for example this is "domain 0" memory), so we decide to offer 7.5GB to VMs.  For RAM, there is no overcommit possible with Nimbus.
+</p>
 
+<div class="note">
+<p class="note-title">nimbus-nodes needs a running service</p>
+    If the service is not running, the nimbus-nodes program will fail to adjust anything.  Make sure the workspace service is running with "./bin/nimbusctl start".
+</p>
+</div>
 
-        <p>
-        If you've reduced the memory allocation below what the
-        current VM(s) on the node is/are currently using, this will
-        not destroy (or migrate) the current VM(s) to adjust to this
-        restriction.
-        If that is necessary it currently needs to be accomplished
-        explicitly.  Once the VM(s) are gone, the maximum memory
-        available on that VMM will be the new, lower maximum.
-        </p>
-    </li>
+<p>
+    You can SSH to each node without password from the nimbus account, right?
+</p>
 
-</ul>
+<div class="screen"><pre>
+service-node $ whoami
+nimbus
+service-node $ ssh nequals01</pre>
+</div>
+
+<div class="screen"><pre>
+nequals01 $ ...</pre>
+</div>
+
+<p>
+    The nodes in the cluster are named based on numbers, so for example "nequals01", "nequals02", etc.  This means we can construct the command with a for loop.
+</p>
+
+<div class="screen"><pre>
+$ NODES="nequals01"
+$ for n in `seq -w 2 10`; do NODES="$NODES,nequals$n"; done
+$ echo $NODES
+nequals01,nequals02,nequals03,nequals04,nequals05,nequals06,nequals07,nequals08,nequals09,nequals10
+</pre>
+</div>
+
+<p>
+    With the <tt class="literal">$NODES</tt> variable in hand, we can make the node-addition call.
+</p>
+
+<div class="screen"><pre>
+$ ./bin/nimbus-nodes --add $NODES --memory 7680
+</pre>
+</div>
+
+<p>
+    At any time you can use the "--list" action to see what the current state of the pool is.
+</p>
+
+<p>
+    There are several other options discussed in the <tt class="literal">nimbus-nodes -h</tt> text, we will highlight one of the most important ones here.
+</p>
+
+<p>
+    If you ever want to disable a VMM, use the live-update feature.  After running the following command, no new VMs can be launched on the node.  Any current VMs, however, will continue running.  So this is a way to "drain" your nodes of work if there is maintenance coming up, etc.
+</p>
+
+<div class="screen"><pre>
+$ ./bin/nimbus-nodes --update nequals08 --inactive
+</pre>
+</div>
 
 
 <a name="pilot"> </a>
@@ -2036,6 +2044,156 @@ some of these variables may been to be changed as well.
 
 </ul>
 
+<a name="lantorrent"> </a>
+<h2>LANTorrent _NAMELINK(lantorrent)</h2>
+<p>
+    <a href="../faq.html#lantorrent">LANTorrent</a> is fast multicast file
+distribution protocol designed to saturate all the links in a switch.  
+There are several optimizations planned for future releases of LANTorrent.
+</p>
+<p>
+LANTorrent works best for the following scenarios:
+    <ol>
+        <li>large file transfers (VM images are typically measured in gigabytes)</li>
+        <li>local area switched network (typical for data center computer racks)</li>
+        <li>file recipients are willing peers.</li>
+            Unlike other peer to peer transfer protocol, bittorrent for 
+            example, LANTorrent is not designed with leeches in mind.  It
+            is designed under the assumption that every peer is a willing
+            and able participant.
+        <li>many endpoints request the same file at roughly the same time</li>
+    </ol>
+</p>
+
+<a name="lantorrent-protocol"> </a>
+<h3>LANTorrent Protocol _NAMELINK(lantorrent-protocol)</h3>
+<p>
+When an endpoint wants a file it submits a request to a central agent.
+This agent aggregates request for files so that they can be sent out in
+an efficient single multi-cast session.  Each request for a source file
+is stored until either N request on that file have been made or N'
+seconds have passed since the last request on that source file has been
+made.  This allows for a user to request a single file in several
+unrelated session yet still have the file transfered in an efficient
+multi-cast session.
+</p>
+<p>
+Once N requests for a given source file have been made or N' seconds
+have passed the destination set for the source file is determined.  A
+chain of destination endpoints is formed such that each node receives
+from and sends to one other node.  The first node receives from the
+repository and send to a peer node, that peer node sends to another,
+and so on until all receive the file.  In this way all links of the
+switch are utilized to send directly to another endpoint in the switch.
+This results in the most efficient transfer on a LAN switched network.
+</p>
+<p>
+Often times in a IaaS system a single network endpoint (VMM) will want
+multiple copies of the same file.  Each file is booted as a virtual
+machine and that virtual machine will make distinct changes to that file
+as it runs, thus it needs it own copy of the file.  However that file
+does not need to be transfered across the network more than once.
+LANTorrent will send the file to each endpoint once and instruct that
+endpoint to write it to multiple files if needed.
+</p>
+
+
+<a name="lantorrent-config"> </a>
+<h3>LANTorrent Configuration _NAMELINK(lantorrent-config)</h3>
+<p>
+LANTorrent is not enabled in a default Nimbus installation.  A few 
+additional steps are required to enable it.
+</p>
+<p>
+The following software is required on both service and VMM nodes:
+    <ol>
+        <li>python2.4</li>
+        <li>python simplejson</li>
+    </ol>
+</p>
+
+<p>
+Lantorrent is run out of xinetd thus it must also be installed on all VMMs.
+</p>
+
+<p>
+To install LANTorrent you must take the following steps:
+
+<ol>
+<li>edit $NIMBUS_HOME/nimbus-setup.conf</li>
+    change lantorrent.enabled: False -&gt; lantorrent.enabled: True
+
+<li>edit $NIMBUS_HOME/services/etc/nimbus/workspace-service/other/common.conf</li>
+    change the value of propagate.extraargs:
+    propagate.extraargs=$NIMBUS_HOME/lantorrent/bin/lt-request
+    <br />
+    be sure to expand $NIMBUS_HOME to its full and actual path.
+
+<li>install lantorrent on VMM</li>
+    <ul>
+        <li>recursively copy $NIMBUS_HOME/lantorrent to /opt/nimbus/lantorrent.</li>
+        <li>run ./vmm-install.sh on each node</li>
+            either run it as your workspace control user or specify the workspace
+            control user as the first and only argument to the script.
+    </ul>
+
+<li>install LANTorrent into xinetd</li>
+    the vmm-install.sh script creates the file lantorrent.  This
+    file is ready to be copied into /etc/xinetd.d/.  Once this is done
+    restart xinetd (/etc/init.d/xinetd restart).
+
+<li>change the propagation method.</li>
+    edit the file:
+        <BR>
+        $NIMBUS_HOME/services/etc/nimbus/workspace-service/other/authz-callout-ACTIVE.xml
+
+        and change:
+    <ul>
+        <li><tt class="literal">
+            &lt;property name="repoScheme" value="scp" /&gt;
+        </tt></li>
+        to:
+        <li><tt class="literal">
+            &lt;property name="repoScheme" value="lantorrent" /&gt;
+        </tt></li>
+    </ul>
+
+<li>restart the service:</li>
+$NIMBUS_HOME/bin/nimbusctl restart
+
+<li>[optional] if the path to nimbus on the workspace control nodes (VMMs)
+    is not /opt/nimbus you will also need to edit a configuration file on
+    all backends.</li>
+
+    <ul>
+    In the file:
+        <li><tt class="literal">
+    &lt;workspace control path&gt;/control/etc/workspace-control/propagation.conf
+        </tt></li>
+
+    make sure the value of:
+
+        <li><tt class="literal">
+    lantorrentexe: /opt/nimbus/bin/ltclient.sh
+        </tt></li>
+
+    points to the proper location of you ltclinet.sh script.  This should
+    be a simple matter of changing /opt/nimbus to the path where you chose
+    to install workspace control.
+    </ul>
+
+<div class="note">
+<p class="note-title">cumulus.ini in Nimbus</p>
+For Nimbus installations this file can be found at
+<tt class="literal">$NIMBUS_HOME/cumulus/etc/cumulus.ini</tt>
+</p>
+</div>
+
+<p>
+Each file in the path is read in (provided it exists).  The values found 
+in each file override the values found in the previous file in this list.
+
+</p>
 <br />
 <br />
 <br />

@@ -17,6 +17,14 @@ Run this command to build, install, and configure Nimbus to a specified path:
 
     ./install /path/to/destination
 
+Note: This is an interactive program, you will be asked a few questions at
+      the end.
+
+To upgrade from an existing Nimbus installation, visit the current upgrade
+guide to learn how to use the install-from command.
+    
+    http://www.nimbusproject.org/docs/current/admin/upgrading.html
+
 Advanced users may also want to build and deploy to an existing GT4.0 
 container. Refer to the readme and scripts in the `scripts/` directory 
 for more information.

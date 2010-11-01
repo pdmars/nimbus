@@ -20,17 +20,19 @@ public class ResourcepoolEntry {
 
     private String resourcePool;
     private String hostname;
+    private boolean active;
     private int memMax = -1; // in MBytes
     private int memCurrent = -1; // in MBytes
     private String supportedAssociations;
 
     public ResourcepoolEntry(String resourcePool, String hostname, int memMax,
-                             int memCurrent, String sa) {
+                             int memCurrent, String sa, boolean active) {
         this.resourcePool = resourcePool;
         this.hostname = hostname;
         this.memMax = memMax;
         this.memCurrent = memCurrent;
         this.supportedAssociations = sa;
+        this.active = active;
     }
 
     public String getHostname() {
@@ -84,6 +86,10 @@ public class ResourcepoolEntry {
         return this.supportedAssociations;
     }
 
+    public boolean isVacant() {
+        return this.memCurrent == this.memMax;
+    }
+
     public void setSupportedAssociations(String supportedAssociations) {
         this.supportedAssociations = supportedAssociations;
     }
@@ -91,6 +97,7 @@ public class ResourcepoolEntry {
     public String toString() {
         return "ResourcepoolEntry{" +
                 "hostname='" + this.hostname + '\'' +
+                ", active=" + this.active +
                 ", memMax=" + this.memMax +
                 ", memCurrent=" + this.memCurrent +
                 ", supportedNetworks='" + this.supportedAssociations +
@@ -106,4 +113,11 @@ public class ResourcepoolEntry {
         return resourcePool;
     }
 
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
+    }
 }

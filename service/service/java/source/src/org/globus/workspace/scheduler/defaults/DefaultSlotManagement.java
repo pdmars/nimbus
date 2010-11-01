@@ -20,8 +20,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.globus.workspace.Lager;
 import org.globus.workspace.ProgrammingError;
-import org.globus.workspace.scheduler.Reservation;
-import org.globus.workspace.scheduler.Scheduler;
+import org.globus.workspace.persistence.WorkspaceDatabaseException;
+import org.globus.workspace.scheduler.*;
 import org.globus.workspace.persistence.PersistenceAdapter;
 import org.globus.workspace.service.InstanceResource;
 import org.globus.workspace.service.WorkspaceHome;
@@ -30,21 +30,13 @@ import org.globus.workspace.service.binding.vm.VirtualMachineDeployment;
 import org.nimbustools.api.services.rm.ResourceRequestDeniedException;
 import org.nimbustools.api.services.rm.DoesNotExistException;
 import org.nimbustools.api.services.rm.ManageException;
-import org.springframework.core.io.Resource;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Enumeration;
-import java.util.HashSet;
-import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.Set;
-import java.util.ArrayList;
+import java.util.*;
 
 /**
  * Needs dependency cleanups
  */
-public class DefaultSlotManagement implements SlotManagement {
+public class DefaultSlotManagement implements SlotManagement, NodeManagement {
 
     // -------------------------------------------------------------------------
     // STATIC VARIABLES
@@ -62,7 +54,6 @@ public class DefaultSlotManagement implements SlotManagement {
     private final Lager lager;
     private WorkspaceHome home;
 
-    private String vmmpoolDirectory;
     private boolean greedy;
 
 
@@ -101,10 +92,6 @@ public class DefaultSlotManagement implements SlotManagement {
     // SET
     // -------------------------------------------------------------------------
 
-    public void setVmmpoolDirectoryResource(Resource vmmpoolDirectoryResource)
-            throws IOException {
-        this.vmmpoolDirectory = vmmpoolDirectoryResource.getFile().getAbsolutePath();
-    }
 
     public void setSelectionStrategy(String selectionStrategy) {
 
@@ -308,7 +295,7 @@ public class DefaultSlotManagement implements SlotManagement {
         for (int i = 0; i < vmids.length; i++) {
 
             try {
-                nodes[i] = ResourcepoolUtil.getResourcePoolEntryImproved(memory,
+                nodes[i] = ResourcepoolUtil.getResourcePoolEntry(memory,
                                                                  assocs,
                                                                  this.db,
                                                                  this.lager,
@@ -386,7 +373,7 @@ public class DefaultSlotManagement implements SlotManagement {
         return true;
     }
 
-    public void releaseSpace(final int vmid) throws ManageException {
+    public synchronized void releaseSpace(final int vmid) throws ManageException {
 
         if (lager.traceLog) {
             logger.trace("releaseSpace(): " + Lager.id(vmid));
@@ -454,93 +441,182 @@ public class DefaultSlotManagement implements SlotManagement {
 
     public synchronized void validate() throws Exception {
 
-        if (this.vmmpoolDirectory == null) {
-            throw new Exception("no resourcepoolDirectory configuration");
+        if (home == null) {
+            throw new Exception("home may not be null");
+        }
+    }
+
+
+    public synchronized ResourcepoolEntry addNode(String hostname,
+                                                  String pool,
+                                                  String associations,
+                                                  int memory,
+                                                  boolean active)
+            throws NodeExistsException {
+
+        if (hostname == null) {
+            throw new IllegalArgumentException("hostname may not be null");
+        }
+        hostname = hostname.trim();
+        if (hostname.length() == 0) {
+            throw new IllegalArgumentException("hostname may not be empty");
         }
 
-        Hashtable previous_resourcepools;
         try {
-            previous_resourcepools =
-                            this.db.currentResourcepools(false);
-        } catch (ManageException e) {
-            logger.error("",e);
-            previous_resourcepools = null;
-        }
+            final ResourcepoolEntry existing =
+                    this.db.getResourcepoolEntry(hostname);
 
-        final Hashtable new_resourcepools =
-                            ResourcepoolUtil.loadResourcepools(
-                                               this.vmmpoolDirectory,
-                                               previous_resourcepools,
-                                               this.lager.traceLog);
-
-        // This will catch the corner case of one or many VMs being started
-        // on a node, the node being deleted from the configuration, the node
-        // being RE-inserted into the configuration, all the while with no
-        // VM memory being retired.
-
-        // It will also catch duplicate hostnames listed in different pools.
-        final Set hostnamesSeen = new HashSet(64);
-
-        final Enumeration en = new_resourcepools.keys();
-        while (en.hasMoreElements()) {
-            final String poolName = (String) en.nextElement();
-            final Resourcepool pool =
-                    (Resourcepool) new_resourcepools.get(poolName);
-
-            final Hashtable entries = pool.getEntries();
-            if (entries == null || entries.isEmpty()) {
-                logger.info("Resource pool '" +
-                        poolName + "' had no VMMs.");
-                continue;
+            if (existing != null) {
+                throw new NodeExistsException("A VMM node with the hostname "+
+                        hostname+" already exists in the pool");
             }
-            
-            final Collection coll = entries.values();
-            final Iterator iter = coll.iterator();
-            while (iter.hasNext()) {
-                final ResourcepoolEntry entry =
-                                (ResourcepoolEntry) iter.next();
 
-                if (!hostnamesSeen.add(entry.getHostname())) {
-                    throw new Exception("Duplicate hostname '" +
-                                entry.getHostname() + "' in resource pools");
+            // This will catch the corner case of one or many VMs being started
+            // on a node, the node being deleted from the configuration, the node
+            // being RE-inserted into the configuration, all the while with no
+            // VM memory being retired.
+
+            final int memInUse =
+                        this.db.memoryUsedOnPoolnode(hostname);
+
+            final int correctCurrentMem = memory - memInUse;
+
+            if (correctCurrentMem == memory) {
+                if (lager.traceLog) {
+                    logger.trace("curmem for VMM '" + hostname +
+                            "' matches VM records");
                 }
-
-                final int memInUse =
-                        this.db.memoryUsedOnPoolnode(entry.getHostname());
-                
-                final int correctCurrentMem = entry.getMemMax() - memInUse;
-
-                if (correctCurrentMem == entry.getMemCurrent()) {
-                    if (lager.traceLog) {
-                        logger.trace("curmem for VMM '" + entry.getHostname() +
-                                "' matches VM records");
-                    }
-                } else {
-                    logger.info("Reconfiguration corner case, current " +
-                            "memory-in-use record for VMM '" +
-                            entry.getHostname() +
-                            "' was wrong, old value was " +
-                            entry.getMemCurrent() + " MB, new value is " +
-                            correctCurrentMem + " MB.");
-                    entry.setMemCurrent(correctCurrentMem);
-                }
-            }
-
-            int numEntries = 0;
-            if (pool.getEntries() != null) {
-                numEntries = pool.getEntries().size();
-            }
-
-            if (numEntries == 1) {
-                logger.info("Resource pool '" +
-                        poolName + "' loaded with one VMM.");
             } else {
-                logger.info("Resource pool '" +
-                        poolName + "' loaded with " + numEntries +
-                        " VMMs.");
+                logger.info("Reconfiguration corner case, current " +
+                        "memory-in-use record for VMM '" +
+                        hostname +
+                        "' was wrong, old value was " +
+                        "0 MB, new value is " +
+                        correctCurrentMem + " MB.");
             }
+
+            final ResourcepoolEntry entry =
+                    new ResourcepoolEntry(pool, hostname, memory,
+                            correctCurrentMem, associations, active);
+
+            //check then act protected by lock
+            this.db.addResourcepoolEntry(entry);
+
+            return entry;
+
+        } catch (WorkspaceDatabaseException e) {
+            // TODO ???
+            throw new RuntimeException(e);
+        }
+    }
+
+    public List<ResourcepoolEntry> getNodes() {
+        try {
+            return this.db.currentResourcepoolEntries();
+        } catch (WorkspaceDatabaseException e) {
+            // TODO ???
+            throw new RuntimeException(e);
+        }
+    }
+
+    public ResourcepoolEntry getNode(String hostname) {
+        if (hostname == null) {
+            throw new IllegalArgumentException("hostname may not be null");
+        }
+        hostname = hostname.trim();
+        if (hostname.length() == 0) {
+            throw new IllegalArgumentException("hostname may not be empty");
+        }
+        try {
+            return this.db.getResourcepoolEntry(hostname);
+        } catch (WorkspaceDatabaseException e) {
+            // TODO ???
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Updates an existing pool entry.
+     *
+     * Null values for any of the parameters mean no update to that field.
+     * But at least one field must be specified.
+     * @param hostname the node to be updated, required
+     * @param pool the new resourcepool name, can be null
+     * @param networks the new networks association list, can be null
+     * @param memory the new max memory value for the node, can be null
+     * @param active the new active state for the node, can be null
+     * @return the updated ResourcepoolEntry
+     * @throws NodeInUseException
+     * @throws NodeNotFoundException
+     */
+    
+    public synchronized ResourcepoolEntry updateNode(
+            String hostname,
+            String pool,
+            String networks,
+            Integer memory,
+            Boolean active)
+            throws NodeInUseException, NodeNotFoundException {
+
+        try {
+
+            Integer availMemory = null;
+            if (memory != null) {
+                final ResourcepoolEntry entry = getNode(hostname);
+                if (entry == null) {
+                    throw new NodeNotFoundException();
+                }
+
+                if (!entry.isVacant()) {
+                    logger.info("Refusing to update VMM node "+ hostname+
+                            " memory max while VMs are running");
+                    throw new NodeInUseException();
+                }
+                availMemory = memory;
+            }
+
+            boolean updated = this.db.updateResourcepoolEntry(hostname,
+                    pool, networks, memory, availMemory, active);
+            if (!updated) {
+                throw new NodeNotFoundException();
+            }
+
+            return getNode(hostname);
+            
+        } catch (WorkspaceDatabaseException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public synchronized boolean removeNode(String hostname)
+            throws NodeInUseException {
+        if (hostname == null) {
+            throw new IllegalArgumentException("hostname may not be null");
+        }
+        hostname = hostname.trim();
+        if (hostname.length() == 0) {
+            throw new IllegalArgumentException("hostname may not be empty");
         }
 
-        this.db.replaceResourcepools(new_resourcepools);
+        try {
+            final ResourcepoolEntry entry =
+                    this.db.getResourcepoolEntry(hostname);
+
+            if (entry == null) {
+                return false;
+            }
+
+            if (!entry.isVacant()) {
+                throw new NodeInUseException("The VMM node "+ hostname +
+                        " is in use and cannot be removed from the pool");
+            }
+
+            return this.db.removeResourcepoolEntry(hostname);
+
+        } catch (WorkspaceDatabaseException e) {
+            // TODO ???
+            throw new RuntimeException(e);
+        }
+
     }
 }

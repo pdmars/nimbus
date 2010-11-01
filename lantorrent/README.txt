@@ -49,10 +49,18 @@ endpoint to write it to multiple files if needed.
 Enabling Lantorrent in Nimbus
 -----------------------------
 
-Lan torrent is part of the nimbus distribution as of Nimbus 2.XXX.  
-However, due to system administrative overhead it is not enabled by 
-default.  To enable Lantorrent in nimbus there are a few configurations 
+Lan torrent is part of the Nimbus distribution as of Nimbus 2.6.
+However, due to system administrative overhead it is not enabled by
+default.  To enable Lantorrent in Nimbus there are a few configurations
 changes that must be made.
+
+The following software is required on both service and VMM nodes:
+  - python 2.4
+  - python simplejson
+
+Lantorrent is run out of xinetd thus it must also be installed on all VMMs.
+
+To install LANTorrent you must take the following steps:
 
 1) edit $NIMBUS_HOME/nimbus-setup.conf
     change lantorrent.enabled: False -> lantorrent.enabled: True
@@ -63,21 +71,29 @@ changes that must be made.
 
     be sure to expand $NIMBUS_HOME to its full and actual path.
 
-3) xinetd
-    Lantorrent is run out of xinetd thus it must be installed on all VMMs.  
-    
-4) install lantorrent on VMM
+3) install lantorrent on VMM
     - recursively copy $NIMBUS_HOME/lantorrent to /opt/nimbus/lantorrent.
     - run ./vmm-install.sh on each node
         either run it as your workspace control user or specify the workspace
         control user as the first and only argument to the script.
 
-4.1) install lantorrent into xinetd
-    - the vmm-install,sh script creates the file lantorrent.inet.  This 
+4) install lantorrent into xinetd
+    - the vmm-install.sh script creates the file lantorrent.  This
       file is ready to be copied into /etc/xinetd.d/.  Once this is done
       restart xinetd (/etc/init.d/xinetd restart).
 
-5) [optional] if the path to nimbus on the workspace control nodes (VMMs)
+5) change the propagation method.
+    - edit the file: 
+        $NIMBUS_HOME/services/etc/nimbus/workspace-service/other/authz-callout-ACTIVE.xml
+
+        and change:
+            <property name="repoScheme" value="scp" />
+        to:
+            <property name="repoScheme" value="lantorrent" />
+
+6) restart the service: $NIMBUS_HOME/bin/nimbusctl restart
+
+7) [optional] if the path to Nimbus on the workspace control nodes (VMMs)
     is not /opt/nimbus you will also need to edit a configuration file on 
     all backends.
 
@@ -88,7 +104,7 @@ changes that must be made.
     
     lantorrentexe: /opt/nimbus/bin/ltclient.sh 
 
-    points to the proper location of you ltclinet.sh script.  This should
+    points to the proper location of you ltclient.sh script.  This should
     be a simple matter of changing /opt/nimbus to the path where you chose
     to install workspace control.
 
@@ -152,5 +168,3 @@ The value of signature is the hmac signature of everything that came
 before the literal EOH.  The password for that signature is found in the 
 lt.ini file.  Every endpoint and the master repo must have the same 
 value for that password.
-
-

@@ -13,37 +13,25 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
+package org.globus.workspace.scheduler;
 
-package org.globus.workspace.scheduler.defaults;
+import org.globus.workspace.WorkspaceException;
 
-import java.util.Hashtable;
-
-public class Resourcepool {
-
-    private Hashtable entries;
-    private long fileTime = -1;
-
-    public Hashtable getEntries() {
-        return this.entries;
+public class NodeInUseException extends WorkspaceException {
+    public NodeInUseException() {
+        super();
     }
 
-    public void setEntries(Hashtable entries) {
-        this.entries = entries;
+    public NodeInUseException(String message) {
+        super(message);
     }
 
-    public long getFileTime() {
-        return this.fileTime;
+    public NodeInUseException(String message, Exception e) {
+        super(message, e);
+
     }
 
-    public void setFileTime(long fileTime) {
-        this.fileTime = fileTime;
+    public NodeInUseException(Exception e) {
+        super("", e);
     }
-
-    public String toString() {
-        return "Resource{" +
-                "fileTime=" + this.fileTime +
-                ", entries=\n" + this.entries +
-                "\n}";
-    }
-
 }

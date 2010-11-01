@@ -27,7 +27,7 @@ object_types[object_type_s3] = 1
 object_types[object_type_gridftp] = 2
 object_types[object_type_hdfs] = 3
 
-Version = "2.5"
+Version = "2.6"
 
 def long_help_callback(option, opt, value, parser, all_opts):
     for o in all_opts:
@@ -81,6 +81,8 @@ def random_string_gen(len):
 
 def get_db_connection_string():
     con_str = os.environ['NIMBUS_AUTHZ_DB']
+    if con_str[0] == "/":
+        con_str = "sqlite:///" + con_str
     return con_str
 
 def parse_args(p, all_opts, argv):
