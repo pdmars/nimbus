@@ -38,6 +38,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import java.util.Date;
+import java.util.concurrent.CountDownLatch;
 import java.net.URI;
 import java.io.File;
 import java.io.FileReader;
@@ -268,6 +269,7 @@ public class Backfill {
         int vmid;
         int count = 0;
         int successfulTerminations = 0;
+        CountDownLatch terminations = new CountDownLatch(numNodes);
 
         while (count < numNodes) {
             if ((this.terminationPolicy.compareTo("ANY")) == 0) {
@@ -280,22 +282,49 @@ public class Backfill {
 
             if (vmid != -1) {
                 String vmidStr = Integer.toString(vmid);
-                logger.debug("Terminating backfill node with ID: " + vmidStr);
+                logger.debug("Shutting down backfill node with ID: " +
+                        vmidStr);
 
                 Caller caller = this.getBackfillCaller();
                 try {
-                    this.manager.trash(vmidStr, 0, caller);
+                    this.manager.shutdown(vmidStr, 0, null, caller);
+
+                    BackfillTermination vmListener = new BackfillTermination(vmidStr,
+                            terminations, caller, this.manager);
+
+                    try{
+                        this.manager.registerStateChangeListener(vmidStr,
+                                0, vmListener);
+                    } catch (Exception e) {
+                        logger.error("Problem registering backfill " +
+                                "termination StateChangeListener: " +
+                                e.getMessage());
+                        terminations.countDown();
+                    }
+
                     this.subCurInstances(1);
                     successfulTerminations += 1;
+
                 } catch (Exception e) {
-                    logger.error("Problem terminating backfill node: " +
+                    logger.error("Problem shutting down backfill node: " +
                             e.getMessage());
+
+                    terminations.countDown();
                 }
             } else {
                 logger.debug("No backfill VM to terminate");
+
+                terminations.countDown();
             }
 
             count += 1;
+        }
+
+        try {
+            terminations.await();
+        } catch (Exception e) {
+            logger.error("Interrupted while waiting for all backfill " +
+                    "terminations to occur, how rude: " + e.getMessage());
         }
 
         return successfulTerminations;
