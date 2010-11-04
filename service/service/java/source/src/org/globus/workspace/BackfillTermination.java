@@ -31,7 +31,8 @@ public class BackfillTermination implements StateChangeCallback {
     }
     
     public void newState(State state) {
-        if ((state.getState().compareTo("Propagated")) == 0) {
+        if (((state.getState().compareTo("Propagated")) == 0) ||
+                ((state.getState().compareTo("Corrupted")) == 0)) {
             try {
                 this.manager.trash(this.vmidStr, 0, this.caller);
             } catch (Exception e) {
@@ -39,8 +40,7 @@ public class BackfillTermination implements StateChangeCallback {
                         e.getMessage());
             }
             this.terminations.countDown();
-        }
-        else {
+        } else {
             logger.debug("Expecting backfill state change to propagated, " +
                     "instead state changed to: " + state.getState());
             this.terminations.countDown();
