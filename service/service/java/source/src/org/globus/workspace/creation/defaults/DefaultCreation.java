@@ -56,6 +56,7 @@ import org.nimbustools.api.repr.ReprFactory;
 import org.nimbustools.api.repr.CannotTranslateException;
 import org.nimbustools.api.repr.Advertised;
 import org.nimbustools.api.repr.ctx.Context;
+import org.nimbustools.api.repr.vm.Schedule;
 import org.nimbustools.api.repr.vm.VM;
 import org.nimbustools.api.repr.vm.ResourceAllocation;
 import org.nimbustools.api.repr.vm.NIC;
@@ -333,7 +334,15 @@ public class DefaultCreation implements Creation {
             bound = this.binding.processRequest(req);
         } catch (ResourceRequestDeniedException e) {
             logger.debug("Failed to reserve the resource: " + e.getMessage());
-            if (req.getRequestedSchedule().getBackfillReq() == false) {
+
+            Schedule sched = req.getRequestedSchedule();
+            boolean isBackfillReq;
+            if (sched == null) {
+                isBackfillReq = false;
+            } else {
+                isBackfillReq = sched.getBackfillReq();
+            }
+            if (isBackfillReq == false) {
                 logger.debug("The request isn't a backfill request");
                 logger.debug("Attempting to terminate backfill nodes");
                 boolean continueTerminateBackfill = true;
@@ -368,8 +377,12 @@ public class DefaultCreation implements Creation {
         final Context context = req.getContext();
         final String groupID = this.getGroupID(creatorID, bound.length);
         final String coschedID = this.getCoschedID(req, creatorID);
-        final boolean backfillReq =
-                req.getRequestedSchedule().getBackfillReq();
+        final boolean backfillReq;
+        if (req.getRequestedSchedule() == null) {
+            backfillReq = false;
+        } else {
+            backfillReq = req.getRequestedSchedule().getBackfillReq();
+        }
 
         // From this point forward an error requires backOutAllocations
         try {
