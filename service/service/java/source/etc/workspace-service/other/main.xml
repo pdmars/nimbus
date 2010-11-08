@@ -272,6 +272,8 @@
                   value="$BACKFILL{disk.image}" />
         <property name="memoryMB"
                   value="$BACKFILL{memory.MB}" />
+        <property name="vcpus"
+                  value="$BACKFILL{vcpus}" />
         <property name="durationSeconds"
                   value="$BACKFILL{duration.seconds}" />
         <property name="terminationPolicy"

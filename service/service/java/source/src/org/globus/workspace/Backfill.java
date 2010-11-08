@@ -66,6 +66,7 @@ public class Backfill {
     private int curNumInstances = 0;
     private String diskImage;
     private int memoryMB;
+    private int vcpus;
     private int durationSeconds;
     private String terminationPolicy;
     private int retryPeriod;
@@ -122,6 +123,10 @@ public class Backfill {
         return this.memoryMB;
     }
 
+    public int getVcpus() {
+        return this.vcpus;
+    }
+
     public int getDurationSeconds() {
         return this.durationSeconds;
     }
@@ -160,6 +165,10 @@ public class Backfill {
 
     public void setMemoryMB(int memoryMB) {
         this.memoryMB = memoryMB;
+    }
+
+    public void setVcpus(int vcpus) {
+        this.vcpus = vcpus;
     }
 
     public void setDurationSeconds(int durationSeconds) {
@@ -462,6 +471,7 @@ public class Backfill {
         req.setRequestedSchedule(schedule);
         ra.setNodeNumber(1);
         ra.setMemory(this.memoryMB);
+        ra.setIndCpuCount(this.vcpus);
         req.setShutdownType(CreateRequest.SHUTDOWN_TYPE_TRASH);
         req.setInitialStateRequest(CreateRequest.INITIAL_STATE_RUNNING);
 
