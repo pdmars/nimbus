@@ -18,7 +18,7 @@ class TestLsCli(unittest.TestCase):
     def setUp(self):
         (osf, self.fname) = tempfile.mkstemp()
         os.close(osf)
-#        os.environ['CUMULUS_AUTHZ_DDL'] = "/home/bresnaha/Dev/Nimbus/nimbus/cumulus/authz/etc/acl.sql"
+# os.environ['CUMULUS_AUTHZ_DDL'] = "/home/bresnaha/Dev/Nimbus/nimbus/cumulus/authz/etc/acl.sql"
         os.environ['NIMBUS_AUTHZ_DB'] = self.fname
         pynimbusauthz.db.make_test_database(self.fname)
         self.db = DB(con_str=self.fname)
@@ -45,4 +45,6 @@ class TestLsCli(unittest.TestCase):
     def test_fail_ls(self):
         rc = pynimbusauthz.ls.main(["-p", "nobucket", self.name[0:-1]])
         self.assertNotEqual(rc, 0, "CLI should return success %d" % (rc))
+
+
 

@@ -4,9 +4,13 @@ import os
 from socket import *
 import logging
 import pylantorrent
+from pylantorrent.db import LantorrentDB
 from pylantorrent.server import LTServer
 from pylantorrent.client import LTClient
-import simplejson as json
+try:
+    import json
+except ImportError:
+    import simplejson as json
 import traceback
 import uuid
 import time
@@ -101,13 +105,15 @@ def do_it_live(con, rows):
     final['degree'] = 1
     final['destinations'] = dests
 
-    pylantorrent.log(logging.INFO, "request send %s" % (str(final)))
+    pylantorrent.log(logging.INFO, "request send %s" % (json.dumps(final, sort_keys=True, indent=4)))
     pylantorrent.log(logging.INFO, "sending em!")
 
     client = LTClient(src_filename, final)
     v = LTServer(client, client)
-    v.store_and_forward()
-
+    try:
+        v.store_and_forward()
+    except Exception, ex:
+        pylantorrent.log(logging.ERROR, "an error occured on store and forward: %s" % (str(ex)))
     rc = 0
     es = client.get_incomplete()
     bad_rid = []
@@ -148,6 +154,9 @@ def main(argv=sys.argv[1:]):
 
     pylantorrent.log(logging.INFO, "enter %s" % (sys.argv[0]))
 
+    # use sqlaclh to make sure the db is there
+    x = LantorrentDB("sqlite:///%s" % pylantorrent.config.dbfile)
+    x.close()
     con_str = pylantorrent.config.dbfile
     #con = sqlite3.connect(con_str, isolation_level="EXCLUSIVE")
     con = sqlite3.connect(con_str, detect_types=sqlite3.PARSE_DECLTYPES|sqlite3.PARSE_COLNAMES)
@@ -167,5 +176,9 @@ def main(argv=sys.argv[1:]):
     return 0
 
 if __name__ == "__main__":
+    if 'LANTORRENT_HOME' not in os.environ:
+        msg = "The env LANTORRENT_HOME must be set"
+        print msg
+        raise Exception(msg)
     rc = main()
     sys.exit(rc)

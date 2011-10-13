@@ -635,9 +635,7 @@ class cbPutObject(cbRequest):
             mSum = base64.encodestring(base64.b16decode(eTag.upper()))
             self.checkMD5 = mSum
 
-            if self.checkMD5 != mSum:
-                raise cbException('InvalidDigest')
-
+            pycb.log(logging.INFO, "sent %s etag %s" % (self.objectName, self.checkMD5))
             self.setHeader(self.request, 'ETag', '"%s"' % (eTag))
 
             # now that we have the file set delete on close to false
@@ -657,8 +655,8 @@ class cbPutObject(cbRequest):
             gdEx = cbException('InvalidArgument')
             gdEx.sendErrorResponse(self.request, self.requestId)
 
-    #  recveive object looks strange because twisted has alrady received
-    #  the enitre file and put it in a temp location.  we now just have 
+    #  receive object looks strange because twisted has already received
+    #  the entire file and put it in a temp location.  we now just have
     #  to recognize that we have it all
     def recvObject(self, request, dataObj):
         self.set_common_headers()
@@ -805,7 +803,7 @@ class cbCopyObject(cbRequest):
 
             lm = doc.createElement("LastModified")
             cor.appendChild(lm)
-            lmText = doc.createTextNode(str(self.src_ctm))
+            lmText = doc.createTextNode(datetime(*self.src_ctm[:6]).isoformat())
             lm.appendChild(lmText)
 
             lm = doc.createElement("ETag")

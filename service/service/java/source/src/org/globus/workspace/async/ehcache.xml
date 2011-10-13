@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+
+<ehcache>
+
+    <defaultCache
+        maxElementsInMemory="2000"
+        eternal="false"
+        timeToIdleSeconds="120"
+        timeToLiveSeconds="120"
+        overflowToDisk="false"
+        />
+
+    <!-- set via system property for now, spring Cache injection doesn't support
+         setting the diskStore path it seems -->
+    <diskStore path="ehcache.disk.store.dir"/>
+
+    <cache name="nimbus-siCache"
+           maxElementsInMemory="100000"
+           diskPersistent="true"
+           diskSpoolBufferSizeMB="0"
+           eternal="true"
+           timeToIdleSeconds="0"
+           timeToLiveSeconds="0"
+           overflowToDisk="true"
+           clearOnFlush="false"
+        />
+
+</ehcache>

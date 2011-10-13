@@ -1,3 +1,53 @@
+nimbus-cloud-client-020
+-----------------------
+[*] Set the permissions on --common upload so that all users can read it.
+
+[*] Changed samples/base-cluster.xml so that is references the newer image
+    base-cluster-cc14.gz
+
+nimbus-cloud-client-019
+-----------------------
+[*] Removed all revocation policies from the distribution.  crl_url 
+    files remain in place for users interested in having this level 
+    of security.
+
+[*] Allowed cloud-client to work if base directory has spaces
+    https://github.com/nimbusproject/nimbus/issues/42
+
+[*] Allow cloud-client to download public VM images
+    https://github.com/nimbusproject/nimbus/issues/38
+
+[*] Added an option to disable the upload spinner
+    https://github.com/nimbusproject/nimbus/issues/30
+
+[*] Made it so an error is returned when a certificate is set that
+    does not exist
+    https://github.com/nimbusproject/nimbus/issues/43
+
+[*] Expand "~/" for cloud.properties options like nimbus.cert
+    https://github.com/nimbusproject/nimbus/issues/5
+
+[*] Fixed history tracking issue when more than 100 VMs are launched:
+    https://github.com/nimbusproject/nimbus/issues/45
+
+
+nimbus-cloud-client-018
+-----------------------
+
+[*] Changed the default settings in jets3t that caused a timeout if the 
+    socket was idle for more than 60 seconds.  Some machines flush their
+    cache on close and if they have a lot of memory it can exceed this 
+    timeout.  This lead to an infite repeat of the upload.
+    https://github.com/nimbusproject/nimbus/issues/issue/29
+    
+[*] Made the spinner update less frequently (once per second).  This cause
+    less noise on the network for remote users.
+    https://github.com/nimbusproject/nimbus/issues/issue/28
+
+[*] Allowed the progress bar to reach 100% instead of staying at 99%
+    https://github.com/nimbusproject/nimbus/issues/issue/31/
+
+
 nimbus-cloud-client-017
 -----------------------
 

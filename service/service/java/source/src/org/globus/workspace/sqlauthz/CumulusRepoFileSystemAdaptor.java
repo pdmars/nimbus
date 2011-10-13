@@ -22,6 +22,14 @@ public class CumulusRepoFileSystemAdaptor implements RepoFileSystemAdaptor
         this.dl = dl;
     }
 
+    public String getTranslatedChecksum(
+        String                          publicUrl)
+            throws WorkspaceException
+    {
+        return dl.getTranslatedChecksum(publicUrl);
+    }
+
+
     public String translateExternaltoInternal(
         String                          publicName,
         VirtualMachine                  vm)
@@ -31,10 +39,12 @@ public class CumulusRepoFileSystemAdaptor implements RepoFileSystemAdaptor
     }
 
     public void unpropagationFinished(
-        String                          publicName)
+        String                          publicName,
+        String                          creatorID,
+        VirtualMachine                  vm)
             throws WorkspaceException
     {
-        dl.unpropagationFinished(publicName);
+            dl.unpropagationFinished(publicName, creatorID, vm);
     }
 }
 

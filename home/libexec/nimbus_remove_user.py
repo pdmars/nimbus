@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 """
-Creates a new nimbus users.  It will create all needed user aliases (cumulus,
+Removes nimbus users.  It will remove all unneeded user aliases (cumulus,
 x509, and web loging id)
 """
 from nimbusweb.setup import autoca
@@ -25,6 +25,7 @@ import shlex
 from nimbusweb.setup.setuperrors import *
 from nimbusweb.setup.groupauthz import *
 import traceback
+import shutil
 
 g_created_cert_files=False
 g_report_options = ["cert", "key", "dn", "canonical_id", "access_id", "access_secret", "url", "web_id"]
@@ -49,7 +50,7 @@ def get_nimbus_home():
 def setup_options(argv):
 
     u = """[options] <email>
-Create a new nimbus user
+Remove a nimbus user
     """
     (parser, all_opts) = pynimbusauthz.get_default_options(u)
     (o, args) = pynimbusauthz.parse_args(parser, all_opts, argv)
@@ -89,8 +90,7 @@ def remove_gridmap(dn):
         print "WARNING! user DN not found in gridmap: %s" % (dn)
     os.close(nf)
     f.close()
-    os.unlink(gmf)
-    os.rename(new_name, gmf)
+    shutil.move(new_name, gmf)
 
 def delete_user(o):
     con_str = pycb.config.authzdb
@@ -128,6 +128,8 @@ def main(argv=sys.argv[1:]):
     except CLIError, clie:
         print clie
         return clie.get_rc()
+    except SystemExit, se:
+        pass
     except:
         traceback.print_exc(file=sys.stdout)
 

@@ -16,6 +16,7 @@
 
 package org.globus.workspace.scheduler;
 
+import org.globus.workspace.StateChangeInterested;
 import org.nimbustools.api.services.rm.ResourceRequestDeniedException;
 import org.nimbustools.api.services.rm.SchedulingException;
 import org.nimbustools.api.services.rm.ManageException;
@@ -25,7 +26,7 @@ import java.util.Calendar;
 /**
  * TODO: move termination time/unpropagation scheduling into this module 
  */
-public interface Scheduler {
+public interface Scheduler extends StateChangeInterested{
 
     /* See WorkspaceResource interface for some of the things we
        expect from scheduler -> service interactions */
@@ -37,6 +38,7 @@ public interface Scheduler {
      * @see #proceedCoschedule for handling separate requests together 
      *
      * @param memory MB needed
+     * @param cores CPU cores needed
      * @param duration seconds needed
      * @param neededAssociations networks needed
      * @param numNodes number needed
@@ -48,11 +50,13 @@ public interface Scheduler {
      * @throws SchedulingException internal problem
      */
     public Reservation schedule(int memory,
+                                int cores,
                                 int duration,
                                 String[] neededAssociations,
                                 int numNodes,
                                 String groupid,
                                 String coschedid,
+                                boolean preemptable,
                                 String creatorDN)
                 
             throws SchedulingException,
@@ -73,27 +77,7 @@ public interface Scheduler {
 
                 throws SchedulingException,
                        ResourceRequestDeniedException;
-
-    /**
-     * This notification allows the scheduler to be autonomous
-     * from the service layer's actions if it wants to be (instead
-     * of allowing the resource states to progress, it could time
-     * every state transition by continually re-adjusting the
-     * resource's target state when it is time to transition it).
-     *
-     * The first state notification (always preceded by a call to
-     * schedule) signals that the scheduler may act.  This allows
-     * the service layer to finalize creation before the scheduler
-     * acts on a a resouce.
-     *
-     * @param vmid id
-     * @param state STATE_* in WorkspaceConstants
-     * @throws ManageException problem
-     */
-    public void stateNotification(int vmid, int state)
-
-            throws ManageException;
-
+    
     /**
      * Notification that the service is in recovery mode.
      * This signature may need to change.
@@ -124,5 +108,36 @@ public interface Scheduler {
     public void slotReserved(int vmid,
                              Calendar start,
                              Calendar stop,
-                             String hostname) throws ManageException;
+                             String hostname) throws ManageException; 
+    
+
+    /**
+     * Used just in backout situations, when request did not reach STATE_FIRST_LEGAL
+     * NOTE: This is to be used instead of scheduler.stateNotification(id, WorkspaceConstants.STATE_DESTROYING),
+     * when the request did not reach the first legal state
+     * @param vmid id
+     * @throws ManageException
+     */
+    public void removeScheduling(int vmid)
+
+            throws ManageException;
+
+    /**
+     * Used when a VM resource was not yet added to the store and these fields cannot be
+     * retrieved directly from there
+     * @param reservation reservation from schedule() call
+     * @param memory memory amount from schedule() call
+     * @param cores core count from schedule() call
+     * @param duration duration minutes from schedule() call
+     * @param preemptible preemptibility flag from schedule() call
+     * @throws ManageException generic failure
+     */
+    public void removeScheduling(Reservation reservation,
+                                 int memory,
+                                 int cores,
+                                 int duration,
+                                 boolean preemptible)
+            throws ManageException;
+
+    public String getVMMReport();
 }

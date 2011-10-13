@@ -12,18 +12,24 @@
     <bean id="nimbus-rm.manager"
           class="org.globus.workspace.manager.DelegatingManager">
 
-        <constructor-arg ref="nimbus-rm.creation"/>
         <constructor-arg ref="nimbus-rm.PathConfigs"/>
         <constructor-arg ref="nimbus-rm.home.instance"/>
         <constructor-arg ref="nimbus-rm.home.group"/>
         <constructor-arg ref="nimbus-rm.home.cosched"/>
+        <constructor-arg ref="nimbus-rm.backfill" />
         <constructor-arg ref="nimbus-repr.ReprFactory"/>
         <constructor-arg ref="nimbus-rm.persistence.DataConvert"/>
         <constructor-arg ref="nimbus-rm.loglevels" />
+        <constructor-arg ref="nimbus-rm.async.manager" />
 
         <property name="accounting"
                   ref="nimbus-rm.accounting" />
-    </bean>
+ 
+        <!-- set after object creation time to avoid circular dep -->
+        <property name="creation"
+		  ref="nimbus-rm.creation" />
+
+   </bean>
 
     
     <!-- ===================================================================
@@ -50,7 +56,7 @@
         <lookup-method name="getManager" bean="nimbus-rm.manager"/>
         <lookup-method name="getReprFactory" bean="nimbus-repr.ReprFactory"/>
         <lookup-method name="getMetadataServer" bean="nimbus-metadata-server"/>
-
+        <lookup-method name="getNodeManagement" bean="nimbus-remoting-nodemgmt" />
     </bean>
 
     
@@ -73,7 +79,7 @@
          =================================================================== -->
 
     <bean id="nimbus-rm.creation"
-          class="org.globus.workspace.creation.defaults.DefaultCreation">
+          class="org.globus.workspace.creation.defaults.CreationManagerImpl">
 
         <constructor-arg ref="nimbus-rm.LockManager" />
         <constructor-arg ref="nimbus-rm.BasicLegality" />
@@ -90,10 +96,24 @@
         <constructor-arg ref="nimbus-rm.home.cosched" />        
         <constructor-arg ref="other.timerManager" />
         <constructor-arg ref="nimbus-rm.loglevels" />
+        <constructor-arg ref="nimbus-rm.service.binding.BindNetwork" />
+
+        <!-- idempotent requests can be disabled by replacing this
+        last arg with a null reference, like:
+
+        <constructor-arg><null/></constructor-arg>
+
+        You can also comment out the idempotent bean definition below but it
+        is not required.
+        -->
+        <constructor-arg ref="nimbus-rm.creation.idempotent"/>
 
         <property name="accountingEventAdapter"
                   ref="nimbus-rm.accounting" />
 
+        <!-- set after object creation time to avoid circular dep -->
+        <property name="siManager"
+		  ref="nimbus-rm.async.manager" />
     </bean>
 
 
@@ -125,7 +145,7 @@
           init-method="validate">
 
         <!-- Property values coming via vmm.conf -->
-        <property name="cpuArchitectureName"
+        <property name="cpuArchitectureNames"
                   value="$VMM{cpu.arch}" />
         <property name="vmm"
                   value="$VMM{vmm.type}" />
@@ -172,6 +192,13 @@
     <bean id="nimbus-rm.service.binding.BindCustomizations"
           class="org.globus.workspace.service.binding.defaults.DefaultBindCustomizations"
           init-method="validate">
+
+        <constructor-arg ref="nimbus-rm.PathConfigs" />
+
+    </bean>
+
+    <bean id="nimbus-rm.service.binding.BindCredential"
+          class="org.globus.workspace.service.binding.defaults.DefaultBindCredential">
 
         <constructor-arg ref="nimbus-rm.PathConfigs" />
 
@@ -292,6 +319,7 @@
         <constructor-arg ref="nimbus-rm.service.binding.GlobalPolicies" />
         <constructor-arg ref="nimbus-rm.persistence.DataConvert" />
         <constructor-arg ref="nimbus-rm.loglevels" />
+	<constructor-arg ref="nimbus-rm.service.binding.BindNetwork" />
 
         <!-- for StatefulResourceImpl: -->
         <constructor-arg ref="nimbus-rm.scheduler.Scheduler" />
@@ -398,6 +426,7 @@
         <constructor-arg ref="other.MainDataSource" />
         <constructor-arg ref="nimbus-rm.loglevels" />
         <constructor-arg ref="nimbus-rm.persistence.dbloader" />
+	    <constructor-arg ref="nimbus-repr.ReprFactory"/>
 
     </bean>
 
@@ -413,6 +442,8 @@
           class="org.globus.workspace.persistence.DataConvert">
 
         <constructor-arg ref="nimbus-repr.ReprFactory" />
+
+        <property name="exposeVMMHostname" value="$COMMON{details.hostname}" />
 
     </bean>
 
@@ -517,20 +548,101 @@
 
         <constructor-arg ref="nimbus-rm.LockManager" />
 
-        <!-- definition of this bean is in "resource-locator-ACTIVE.xml" -->
-        <constructor-arg ref="nimbus-rm.scheduler.SlotManagement" />
-
         <constructor-arg ref="other.MainDataSource" />
         <constructor-arg ref="other.timerManager" />
         <constructor-arg ref="nimbus-rm.service.binding.GlobalPolicies" />
         <constructor-arg ref="nimbus-rm.persistence.DataConvert" />
         <constructor-arg ref="nimbus-rm.loglevels" />
 
-
-
         <!-- set after object creation time to avoid circular dep with home -->
         <property name="home" ref="nimbus-rm.home.instance" />
+        <property name="siManager"
+                   ref="nimbus-rm.async.manager" /> 
+        <!-- definition of this bean is in "resource-locator-ACTIVE.xml" -->
+        <property name="slotManager" 
+        		   ref="nimbus-rm.scheduler.SlotManagement" />                   
+    </bean>
 
+    <bean id="other.repo-imageLocator"
+          class="org.nimbus.authz.CumulusImageLocator"
+          init-method="validate">
+
+        <constructor-arg ref="other.AuthzDataSource" />
+
+        <property name="repoBucket" value="$CUMULUS{cumulus.repo.bucket}" />
+        <property name="prefix" value="$CUMULUS{cumulus.repo.prefix}" />
+        <property name="cumulusHost" value="$CUMULUS{cumulus.host}" />
+        <property name="rootFileMountAs" value="$OTHER_ELASTIC{rootfile.mountas}" />
+
+   </bean>
+
+    <bean id="nimbus-rm.backfill"
+          class="org.globus.workspace.async.backfill.Backfill"
+          init-method="validate">
+
+        <constructor-arg ref="nimbus-rm.persistence.PersistenceAdapter" />
+        <constructor-arg ref="nimbus-repr.ReprFactory"/>
+        <constructor-arg ref="nimbus-rm.loglevels" />
+        <constructor-arg ref="other.repo-imageLocator" />
+
+        <property name="backfillEnabled"
+                  value="$ASYNC{backfill.enabled}" />
+        <property name="maxInstances"
+                  value="$ASYNC{max.instances}" />
+        <property name="diskImage"
+                  value="$ASYNC{disk.image}" />
+        <property name="repoUser"
+                  value="$ASYNC{repo.user}" />
+        <property name="instanceMem"
+                  value="$ELASTIC{memory.$ASYNC{async.instancetype}}" />
+        <property name="cpuArch"
+                  value="$OTHER_ELASTIC{cpu.arch}" />
+        <property name="publicNetwork"
+                  value="$ELASTIC{net.public}" />
+        <property name="privateNetwork"
+                  value="$ELASTIC{net.private}" />
+        <property name="rootFileMountAs"
+                  value="$OTHER_ELASTIC{rootfile.mountas}" />
+        <property name="vmmType"
+                  value="$OTHER_ELASTIC{vmm.type}" />
+         <property name="vmmVersion"
+                   value="$OTHER_ELASTIC{vmm.version}" />
+    </bean>
+
+    <!-- ===================================================================
+         org.globus.workspace.async.* interfaces
+         =================================================================== -->
+
+    <bean id="nimbus-rm.si.pricingmodel" class="$ASYNC{si.pricingmodel}" />
+
+    <bean id="nimbus-rm.si.asyncreqmap" class="org.globus.workspace.async.AsyncRequestMap">
+        <constructor-arg ref="nimbus-rm.persistence.PersistenceAdapter" />
+    </bean>
+
+    <bean id="nimbus-rm.async.manager"
+          class="org.globus.workspace.async.AsyncRequestManagerImpl">
+
+        <constructor-arg ref="nimbus-rm.persistence.PersistenceAdapter" />
+        <constructor-arg ref="nimbus-rm.loglevels" />
+        <constructor-arg ref="nimbus-rm.home.instance"/>
+        <constructor-arg ref="nimbus-rm.home.group"/>
+        <constructor-arg value="$ASYNC{si.minprice}" />
+        <constructor-arg ref="nimbus-rm.si.pricingmodel" />
+        <constructor-arg ref="nimbus-rm.si.asyncreqmap" />
+        <constructor-arg value="$ASYNC{si.enabled}" />
+        <constructor-arg value="$ASYNC{backfill.enabled}" />
+
+        <!-- set after object creation time to avoid circular dep -->
+        <property name="creationManager" ref="nimbus-rm.creation" />
+        
+        <!-- Property values coming via spotinstances.conf -->        
+        <property name="minReservedMem"
+                  value="$ASYNC{async.policies.minreservedmem}" />
+        <property name="maxUtilization"
+                  value="$ASYNC{async.policies.maxutilization}" />
+        <property name="instanceMem"
+                  value="$ELASTIC{memory.$ASYNC{async.instancetype}}" />
+                          
     </bean>
 
     
@@ -568,6 +680,15 @@
 
     </bean>
 
+    <!-- ===================================================================
+         org.globus.workspace.creation.* interfaces
+         =================================================================== -->
+
+    <bean id="nimbus-rm.creation.idempotent"
+          class="org.globus.workspace.creation.defaults.IdempotentCreationManagerImpl">
+        <constructor-arg ref="nimbus-rm.persistence.PersistenceAdapter" />
+    </bean>
+
 
     <!-- ===================================================================
          metadata server related
@@ -585,10 +706,7 @@
         <property name="customizationPath"
                   value="$METADATA{customization.path}" />
 
-        <property name="listenSocket"
-                  value="$METADATA{contact.socket}" />
-
-        <property name="enabled" 
+        <property name="enabled"
                   value="$METADATA{listen}" />
 
         <property name="publicNets"
@@ -596,6 +714,12 @@
 
         <property name="localNets" 
                   value="$METADATA{local.networks}" />
+
+        <!-- some of the metadata server properties are now directly read by the
+        implementation, passed in via this property. This is to allow more
+        flexibility than provided by PropertyPlaceholderConfigurer -->
+        <property name="properties"
+                  ref="metadataSettingsProperties"/>
 
     </bean>
 
@@ -611,14 +735,31 @@
             <map>
                 <entry key="$ADMIN{rmi.binding.nodemgmt}"
                        value-ref="nimbus-remoting-nodemgmt" />
+                <entry key="$ADMIN{rmi.binding.admintools}"
+                       value-ref="nimbus-remoting-admintools" />
             </map>
         </property>
     </bean>
 
     <bean id="nimbus-remoting-nodemgmt"
-          class="org.globus.workspace.remoting.admin.defaults.DefaultRemoteNodeManagement"
-            init-method="initialize">
+          class="org.globus.workspace.remoting.admin.defaults.DefaultRemoteNodeManagement">
         <property name="nodeManagement" ref="nimbus-rm.scheduler.SlotManagement"/>
+        <property name="persistenceAdapter" ref="nimbus-rm.persistence.PersistenceAdapter"/>
+    </bean>
+
+    <bean id="nimbus-remoting-admintools"
+          class="org.globus.workspace.remoting.admin.defaults.DefaultRemoteAdminToolsMgmt">
+
+        <property name="manager"
+                  ref="nimbus-rm.manager" />
+        <property name="reprFactory"
+                  ref="nimbus-repr.ReprFactory" />
+        <property name="authzDataSource"
+                  ref="other.AuthzDataSource" />
+        <property name="workspaceHome"
+                  ref="nimbus-rm.home.instance" />
+        <property name="authzCallout"
+                  ref="nimbus-rm.service.binding.AuthorizationCallout" />
     </bean>
 
     <!-- ===================================================================
@@ -677,6 +818,20 @@
         <property name="username" value="nimbus"/>
         <property name="password" value="$DERBY{derby.user.nimbus}"/>
         
+    </bean>
+
+    <bean id="other.AuthzDataSource"
+          class="org.apache.commons.dbcp.BasicDataSource">
+       <property name="driverClassName" value="org.sqlite.JDBC" />
+       <property name="maxActive" value="10" />
+       <property name="maxIdle" value="4" />
+       <property name="maxWait" value="2000" />
+       <property name="poolPreparedStatements" value="true" />
+
+       <property name="url"
+                 value="jdbc:sqlite://$CUMULUS{cumulus.authz.db}" />
+       <property name="username" value="nimbus"/>
+       <property name="password" value="nimbus"/>
     </bean>
 
 </beans>

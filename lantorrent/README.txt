@@ -40,7 +40,7 @@ This results in the most efficient transfer on a LAN switched network.
 Often times in a IaaS system a single network endpoint (VMM) will want 
 multiple copies of the same file.  Each file is booted as a virtual 
 machine and that virtual machine will make distinct changes to that file 
-as it runs, thus it needs it own copy of the file.  However that file 
+as it runs, thus it needs its own copy of the file.  However that file 
 does not need to be transfered across the network more than once.  
 Lantorrent will send the file to each endpoint once and instruct that 
 endpoint to write it to multiple files if needed.
@@ -55,7 +55,7 @@ default.  To enable Lantorrent in Nimbus there are a few configurations
 changes that must be made.
 
 The following software is required on both service and VMM nodes:
-  - python 2.4
+  - python 2.5
   - python simplejson
 
 Lantorrent is run out of xinetd thus it must also be installed on all VMMs.
@@ -72,15 +72,41 @@ To install LANTorrent you must take the following steps:
     be sure to expand $NIMBUS_HOME to its full and actual path.
 
 3) install lantorrent on VMM
-    - recursively copy $NIMBUS_HOME/lantorrent to /opt/nimbus/lantorrent.
-    - run ./vmm-install.sh on each node
-        either run it as your workspace control user or specify the workspace
-        control user as the first and only argument to the script.
+
+    - run: python setup-vmm.py install.  This will output the contents of 
+      the xinetd configuration file that you will need in the next step.
+      [optional] You may want to setup a python virtual environment for
+      the installation.
+      To do this, run: virtualenv /path_to_install_lantorrent
+      Then, use the /path_to_install_lantorrent/bin/python binary
+      instead of your system python.
+      [optional] If you don't have Internet connectivity on the VMM, you
+      will have to manually install the simplejson library from source
+      (in the virtual env if you chose to create one).
 
 4) install lantorrent into xinetd
-    - the vmm-install.sh script creates the file lantorrent.  This
-      file is ready to be copied into /etc/xinetd.d/.  Once this is done
-      restart xinetd (/etc/init.d/xinetd restart).
+    - the above step outputs and xinetd file like this:
+
+    ============== START WITH THE NEXT LINE ==================
+    service lantorrent
+    {
+        type        = UNLISTED
+        disable     = no
+        socket_type = stream
+        protocol    = tcp
+        user        = bresnaha
+        wait        = no
+        port        = 2893
+        server      = /home/bresnaha/lt1/bin/ltserver
+        env         = HOME=/opt/nimbus
+    }                                                                               
+    =============== END WITH THE PREVIOUS LINE =================
+
+    note the 'user' value.  We strongly recommend that it is not 'root'.
+    This user will be the owner of all received files (the nimbus user)
+
+      Copy the output to a file called /etc/xinetd.d/lantorrent. Once 
+      this is done restart xinetd (/etc/init.d/xinetd restart).
 
 5) change the propagation method.
     - edit the file: 

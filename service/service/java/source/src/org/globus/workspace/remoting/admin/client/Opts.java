@@ -102,6 +102,11 @@ public class Opts {
     public final Option UPDATE_NODES_OPT =
                 OptionBuilder.withLongOpt(UPDATE_NODES_LONG).hasArg().create(UPDATE_NODES);
 
+    public static final String POOL_AVAILABILITY = "N";
+    public static final String POOL_AVAILABILITY_LONG = "allocation";
+    public final Option POOL_AVAILABILITY_OPT =
+                OptionBuilder.withLongOpt(POOL_AVAILABILITY_LONG).hasOptionalArg().create(POOL_AVAILABILITY);
+
 
     //*************************************************************************
     // NODE SETTINGS
@@ -132,12 +137,88 @@ public class Opts {
     public final Option POOL_OPT =
                 OptionBuilder.withLongOpt(POOL_LONG).hasArg().create(POOL);
 
+    public static final String FREE = "F";
+    public static final String FREE_LONG = "free";
+    public final Option FREE_OPT =
+                OptionBuilder.withLongOpt(FREE_LONG).create(FREE);
+
+    public static final String USED = "U";
+    public static final String USED_LONG = "used";
+    public final Option USED_OPT =
+                OptionBuilder.withLongOpt(USED_LONG).create(USED);
+
+
+    //*************************************************************************
+    // NIMBUS-ADMIN
+    //*************************************************************************
+
+    public static final String LIST_VMS = "l";
+    public static final String LIST_VMS_LONG = "list";
+    public final Option LIST_VMS_OPT =
+                OptionBuilder.withLongOpt(LIST_VMS_LONG).hasOptionalArg().create(LIST_VMS);
+
+    public static final String SHUTDOWN_VMS = "s";
+    public static final String SHUTDOWN_VMS_LONG = "shutdown";
+    public final Option SHUTDOWN_VMS_OPT =
+                OptionBuilder.withLongOpt(SHUTDOWN_VMS_LONG).hasOptionalArg().create(SHUTDOWN_VMS);
+
+    public static final String ALL_VMS = "a";
+    public static final String ALL_VMS_LONG = "all";
+    public final Option ALL_VMS_OPT =
+                OptionBuilder.withLongOpt(ALL_VMS_LONG).hasOptionalArg().create(ALL_VMS);
+
+    public static final String USER = "u";
+    public static final String USER_LONG = "user";
+    public final Option USER_OPT =
+                OptionBuilder.withLongOpt(USER_LONG).hasOptionalArg().create(USER);
+
+    public static final String DN = "d";
+    public static final String DN_LONG = "dn";
+    public final Option DN_OPT =
+                OptionBuilder.withLongOpt(DN_LONG).hasOptionalArg().create(DN);
+
+    public static final String GROUP_ID = "g";
+    public static final String GROUP_ID_LONG = "gid";
+    public final Option GROUP_ID_OPT =
+                OptionBuilder.withLongOpt(GROUP_ID_LONG).hasOptionalArg().create(GROUP_ID);
+
+    public static final String GROUP_NAME = "gn";
+    public static final String GROUP_NAME_LONG= "gname";
+    public final Option GROUP_NAME_OPT =
+                OptionBuilder.withLongOpt(GROUP_NAME_LONG).hasOptionalArg().create(GROUP_NAME);
+
+    public static final String ID = "i";
+    public static final String ID_LONG = "id";
+    public final Option ID_OPT =
+                OptionBuilder.withLongOpt(ID_LONG).hasOptionalArg().create(ID);
+
+    public static final String SECONDS = "n";
+    public static final String SECONDS_LONG = "seconds";
+    public final Option SECONDS_OPT =
+                OptionBuilder.withLongOpt(SECONDS_LONG).hasOptionalArg().create(SECONDS);
+
+    public static final String HOST = "hn";
+    public static final String HOST_LONG = "host";
+    public final Option HOST_OPT =
+                OptionBuilder.withLongOpt(HOST_LONG).hasOptionalArg().create(HOST);
+
+    public static final String NODE_LIST = "N";
+    public static final String NODE_LIST_LONG = "nodes";
+    public final Option NODE_LIST_OPT =
+                OptionBuilder.withLongOpt(NODE_LIST_LONG).create(NODE_LIST);
+
+    public static final String STATE = "S";
+    public static final String STATE_LONG = "state";
+    public final Option STATE_OPT =
+                OptionBuilder.withLongOpt(STATE_LONG).hasArg().create(STATE);
 
     public final Option[] ALL_ENABLED_OPTIONS = {
             HELP_OPT, DEBUG_OPT, CONFIG_OPT, BATCH_OPT, DELIMITER_OPT,
             REPORT_OPT, JSON_OPT, OUTPUT_OPT, ADD_NODES_OPT, LIST_NODES_OPT,
-            REMOVE_NODES_OPT, UPDATE_NODES_OPT, NETWORKS_OPT, MEMORY_OPT, POOL_OPT,
-            ACTIVE_OPT, INACTIVE_OPT,
+            REMOVE_NODES_OPT, UPDATE_NODES_OPT, POOL_AVAILABILITY_OPT, NETWORKS_OPT, MEMORY_OPT, POOL_OPT,
+            ACTIVE_OPT, INACTIVE_OPT, LIST_VMS_OPT, SHUTDOWN_VMS_OPT, USER_OPT, ID_OPT,
+            SECONDS_OPT, ALL_VMS_OPT, HOST_OPT, DN_OPT, GROUP_ID_OPT,
+            GROUP_NAME_OPT, FREE_OPT, USED_OPT, NODE_LIST_OPT, STATE_OPT
     };
 
 }

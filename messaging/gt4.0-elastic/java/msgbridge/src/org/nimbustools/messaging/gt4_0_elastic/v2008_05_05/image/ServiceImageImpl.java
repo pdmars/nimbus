@@ -16,14 +16,16 @@
 
 package org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image;
 
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesResponseType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesOwnersType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesOwnerType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesInfoType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesItemType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesResponseInfoType;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.DescribeImagesResponseItemType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesResponseType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesOwnersType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesOwnerType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesInfoType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesItemType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesResponseInfoType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.DescribeImagesResponseItemType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.BlockDeviceMappingType;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.BlockDeviceMappingItemType;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.ContainerInterface;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.service.UnimplementedOperations;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.ServiceImage;
@@ -261,6 +263,8 @@ public class ServiceImageImpl extends UnimplementedOperations
             dirit.setIsPublic(!listing.isReadWrite()); // cloud convention
             dirit.setKernelId("default-kernel"); // todo
             dirit.setRamdiskId("default-ramdisk"); // todo
+            dirit.setBlockDeviceMapping(new BlockDeviceMappingType(
+                    new BlockDeviceMappingItemType[]{}));
             retList.add(dirit);
         }
 

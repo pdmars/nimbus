@@ -438,47 +438,39 @@ public abstract class WorkspaceHomeImpl implements WorkspaceHome,
 
         try {
             final InstanceResource resource = this.find(id);
-            resource.remove();
-            this.cache.remove(id);
+            if (resource.remove()) {
+                this.cache.remove(id);
+            }
 
         } finally {
             lock.unlock();
         }
     }
 
-    /**
-     * Destroy a set of workspaces.  Return a list of errors separated by \n,
-     * including if the workspace was not found, etc.  This does not cut out
-     * early if there is any kind of problem.
-     *
-     * Implemented with multiple threads because the remove procedure is
-     * blocking.
-     *
-     * @param workspaces list of workspace IDs
-     * @param sourceStr string for log msgs, or null
-     * @return string report on what happened
-     */
-    public String destroyMultiple(int[] workspaces,
-                                  String sourceStr) {
+    public String destroyMultiple(int[] workspaces, String sourceStr) {
+        return this.destroyMultiple(workspaces, sourceStr, false);
+    }
+
+    public String destroyMultiple(int[] workspaces, String sourceStr, boolean block) {
 
         final FutureTask[] tasks = new FutureTask[workspaces.length];
         for (int i = 0; i < workspaces.length; i++) {
             tasks[i] = new FutureTask(
-                            new DestroyFutureTask(workspaces[i], this));
+                            new DestroyFutureTask(workspaces[i], this, block));
         }
 
         for (int i = 0; i < tasks.length; i++) {
             this.executor.submit(tasks[i]);
         }
 
-        final StringBuffer buf = new StringBuffer(tasks.length * 256);
+        final StringBuilder buf = new StringBuilder(tasks.length * 256);
 
-        // Log any unexpected errors.  Wait two minutes (normal destroy time
+        // Log any unexpected errors.  Wait twenty seconds (normal destroy time
         // should be a matter of seconds even if there is high congestion).
         // todo: make timeout configurable
         for (int i = 0; i < tasks.length; i++) {
             try {
-                final String msg = (String) tasks[i].get(120L, TimeUnit.SECONDS);
+                final String msg = (String) tasks[i].get(20L, TimeUnit.SECONDS);
                 if (msg != null) {
                     buf.append(msg);
                 }
@@ -513,6 +505,9 @@ public abstract class WorkspaceHomeImpl implements WorkspaceHome,
         if (this.executor != null) {
             this.executor.shutdownNow();
         }
+        if (this.cache != null) {
+            this.cache.removeAll();
+        }
     }
 
     /**
@@ -542,6 +537,8 @@ public abstract class WorkspaceHomeImpl implements WorkspaceHome,
         this.scheduledExecutor.setRemoveOnCancelPolicy(true);
         this.scheduledExecutor.setMaximumPoolSize(5);
 
+        // Pass in the general executor, not the scheduled one.  Sweeper uses that to
+        // execute any tasks it creates.
         final ResourceSweeper sweeper =
                 new ResourceSweeper(this.executor, this, this.lager);
 
@@ -813,5 +810,14 @@ public abstract class WorkspaceHomeImpl implements WorkspaceHome,
             throws ManageException {
 
         return this.findIDsByCaller(callerID).length;
+    }
+
+
+    // -------------------------------------------------------------------------
+    // OTHER
+    // -------------------------------------------------------------------------
+
+    public String getVMMReport() {
+        return this.scheduler.getVMMReport();
     }
 }

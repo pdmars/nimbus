@@ -17,8 +17,8 @@
 package org.globus.workspace.service;
 
 import org.globus.workspace.LockAcquisitionFailure;
+import org.globus.workspace.service.binding.vm.FileCopyNeed;
 import org.globus.workspace.service.binding.vm.VirtualMachine;
-import org.globus.workspace.service.binding.vm.CustomizationNeed;
 import org.nimbustools.api.services.rm.OperationDisabledException;
 import org.nimbustools.api.services.rm.DoesNotExistException;
 import org.nimbustools.api.services.rm.ManageException;
@@ -84,6 +84,10 @@ public interface InstanceResource extends Sweepable {
     public void setTerminationTime(Calendar termTime);
 
     public void setStartTime(Calendar startTime);
+
+    public String getClientToken();
+
+    public void setClientToken(String clientToken);
 
 
     // -------------------------------------------------------------------------
@@ -161,16 +165,17 @@ public interface InstanceResource extends Sweepable {
 
     public void newNetwork(String network);
 
-    public void newCustomizationNeed(CustomizationNeed need);
+    public void newFileCopyNeed(FileCopyNeed need);
 
     /**
      * Don't call unless you are managing the instance cache (or not using
      * one, perhaps).
      *
+     * @return true if remove succeeded
      * @throws ManageException problem
      * @throws DoesNotExistException missing
      */
-    public void remove()
+    public boolean remove()
 
             throws ManageException, DoesNotExistException;
 
@@ -305,13 +310,15 @@ public interface InstanceResource extends Sweepable {
      * @param termTime resource destruction time, can be null which mean either
      *                 "never" or "no setting" (while using best-effort sched)
      * @param node assigned node, can be null
+     * @param chargeRatio ratio to compute the real minutes charge, typically <= 1.0 and > 0
      * @throws CreationException problem
      */
     public void populate(int id,
                          VirtualMachine binding,
                          Calendar startTime,
                          Calendar termTime,
-                         String node)
+                         String node,
+                         double chargeRatio)
 
             throws CreationException;
 
@@ -371,4 +378,13 @@ public interface InstanceResource extends Sweepable {
      * @param trashOK vmmAccessOK status
      */
     public void setInitialVMMaccessOK(boolean trashOK);
+
+    /**
+     * Must be zero or greater.
+     * @param chargeRatio double of minutes multiplier for the actual charge
+     */
+    public void setChargeRatio(double chargeRatio);
+    
+    public double getChargeRatio();
+
 }

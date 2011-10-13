@@ -29,7 +29,7 @@ import org.globus.workspace.cmdutils.SSHUtil;
 import org.globus.workspace.service.binding.vm.VirtualMachine;
 import org.globus.workspace.service.binding.vm.VirtualMachineDeployment;
 import org.globus.workspace.service.binding.vm.VirtualMachinePartition;
-import org.globus.workspace.service.binding.vm.CustomizationNeed;
+import org.globus.workspace.service.binding.vm.FileCopyNeed;
 
 import org.nimbustools.api.repr.vm.NIC;
 
@@ -159,16 +159,23 @@ public class XenUtil implements WorkspaceConstants {
         // file movement tools)
         final VirtualMachinePartition[] partitions = vm.getPartitions();
         if (partitions != null) {
+            String md5sum = null;
             cmd.add("--images");
             for (int i = 0; i < partitions.length; i++) {
                 if (partitions[i].isRootdisk()) {
                     String img = partitions[i].getImage();
                     if(nsTrans != null) {
-                        img = nsTrans.translateExternaltoInternal(img, vm);
+                        md5sum = nsTrans.getTranslatedChecksum(img);
+                        img = nsTrans.translateExternaltoInternal(img, vm);                        
                     }
                     cmd.add("'"+img+"'");
                     break;
                 }
+            }
+            if(partitions.length == 1 && md5sum != null)
+            {
+                cmd.add("--cachecksum");
+                cmd.add(md5sum);
             }
         }     
 
@@ -241,6 +248,13 @@ public class XenUtil implements WorkspaceConstants {
         if (notificationInfo != null) {
             cmd.add("--notify");
             cmd.add(notificationInfo);
+        }
+
+        final String credentialName = vm.getCredentialName();
+        if (credentialName != null) {
+
+            cmd.add("--prop-extra-args");
+            cmd.add("'credential=" + credentialName + "'");
         }
 
         return cmd;
@@ -471,22 +485,24 @@ public class XenUtil implements WorkspaceConstants {
             cmd.add(notificationInfo);
         }
 
-        final CustomizationNeed[] needs = vm.getCustomizationNeeds();
+        final FileCopyNeed[] needs = vm.getFileCopyNeeds();
         if (needs != null) {
 
-            if (!vm.isCustomizationAllDone()) {
+            if (!vm.isFileCopyAllDone()) {
                 
-                boolean oneBeingSent = false;
+                boolean oneBeingSentToImage = false;
                 final StringBuffer tasks = new StringBuffer("'");
                 for (int i = 0; i < needs.length; i++) {
 
-                    if (!needs[i].isSent()) {
+                    // Note that we don't copy needs with no destination path
+                    // these are filecopies that are used at propagation time
+                    if (!needs[i].onImage() && needs[i].destPath != null) {
 
-                        if (oneBeingSent) {
+                        if (oneBeingSentToImage) {
                             tasks.append(WC_GROUP_SEPARATOR);
                         }
 
-                        oneBeingSent = true;
+                        oneBeingSentToImage = true;
 
                         tasks.append(needs[i].sourcePath)
                              .append(WC_FIELD_SEPARATOR)
@@ -501,7 +517,7 @@ public class XenUtil implements WorkspaceConstants {
 
                 tasks.append("'");
 
-                if (oneBeingSent) {
+                if (oneBeingSentToImage) {
                     cmd.add("--mnttasks");
                     cmd.add(tasks.toString());
                 }
@@ -777,7 +793,7 @@ public class XenUtil implements WorkspaceConstants {
             throw new Exception("backendTargetDir needed but missing");
         }
 
-        final CustomizationNeed[] needs = vm.getCustomizationNeeds();
+        final FileCopyNeed[] needs = vm.getFileCopyNeeds();
         if (needs == null || needs.length == 0) {
             logger.warn("file push: nothing to do?");
             return;
@@ -814,5 +830,4 @@ public class XenUtil implements WorkspaceConstants {
             WorkspaceUtil.runCommand(send, eventLog, traceLog, vm.getID().intValue());
         }
     }
-
 }

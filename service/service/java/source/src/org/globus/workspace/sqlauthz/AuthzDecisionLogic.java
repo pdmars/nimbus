@@ -60,6 +60,40 @@ public class AuthzDecisionLogic extends DecisionLogic
         return list;
     }
 
+     public String getTranslatedChecksum(
+         String                          publicUrl)    
+            throws WorkspaceException
+    {
+        try
+        {
+            String [] urlParts = parseUrl(publicUrl);
+
+            String scheme = urlParts[0];
+            String hostport = urlParts[1];
+            String objectname = urlParts[2];
+
+            if(!scheme.equals("cumulus"))
+            {
+                return null;
+            }
+
+            int [] fileIds = this.cumulusGetFileID(hostport, objectname);
+
+            String md5sum = this.authDB.getMd5sum(fileIds[1]);
+
+            return md5sum;
+        }
+        catch(AuthzDBException wsdbex)
+        {
+            logger.error("trouble looking up the cumulus information ", wsdbex);
+            throw new WorkspaceException("Trouble with the database " + wsdbex.toString());
+        }
+        catch(Exception ex)
+        {
+            throw new WorkspaceException("error finding the checksum " + publicUrl, ex);
+        }
+    }
+
     public String translateExternaltoInternal(
         String                          publicUrl,
         VirtualMachine                  vm)
@@ -93,7 +127,7 @@ public class AuthzDecisionLogic extends DecisionLogic
         }
         catch(Exception ex)
         {
-            throw new WorkspaceException("error translating cumulus name", ex);
+            throw new WorkspaceException("error translating cumulus name " + publicUrl, ex);
         }
 
         if(rc == null)
@@ -112,16 +146,35 @@ public class AuthzDecisionLogic extends DecisionLogic
         try
         {
             int [] fileIds = this.cumulusGetFileID(hostport, objectName);
+            String rc = null;
+            String scheme = this.getRepoScheme();
+            String dataKey;
 
             if(fileIds[1] < 0)
             {
-                throw new AuthorizationException("The file is not found and thus cannot be translated " + objectName);
+                // if the file doesnt exist create  new one
+                dataKey = this.getRepoDir() + "/" + objectName.replace("/", "__");
+//
+//                File dirF = new File(this.getRepoDir());
+//
+//                try
+//                {
+//                    File tmpF = File.createTempFile("", objectName.replace("/", "__"), dirF);
+//                    dataKey  = tmpF.getAbsolutePath();
+//                }
+//                catch(IOException ioex)
+//                {
+//                    String msg = "could not create unpropagate file " + objectName;
+//                    logger.error(msg, ioex);
+//                    throw new AuthorizationException(msg  + ioex.toString());
+//                }
             }
-
-            String scheme = this.getRepoScheme();
-            String rc = null;
-            String dataKey = this.authDB.getDataKey(fileIds[1]);
-
+            else
+            {
+                dataKey = this.authDB.getDataKey(fileIds[1]);
+                String md5sum = this.authDB.getMd5sum(fileIds[1]);
+                
+            }
             rc = scheme + "://" + this.getRepoHost() + "/" + dataKey;
             logger.debug("converted " + objectName + " to " + rc + "scheme " + scheme);
 
@@ -245,6 +298,7 @@ public class AuthzDecisionLogic extends DecisionLogic
                         // replace common path with user path
                         String userPath = "/" + ownerID + "/";
                         unPropImageName = unPropImageName.replaceFirst(commonPath, userPath);
+                        parts[i].setAlternateUnpropTarget(unPropImageName);
                     }                                                                        
                 }
                 else
@@ -312,9 +366,10 @@ public class AuthzDecisionLogic extends DecisionLogic
                 int [] fileIds = this.cumulusGetFileID(hostport, objectName);
                 String [] results = objectName.split("/", 2);
                 String bucketName = results[0];
-                String keyName = results[1];
+
                 boolean checkSpace = false;
                 String perms = "";
+                long size = 0;
 
                 if(fileIds[0] < 0)
                 {
@@ -322,31 +377,39 @@ public class AuthzDecisionLogic extends DecisionLogic
                 }                
                 if(fileIds[1] < 0 && write)
                 {
-                    String dataKey = this.getRepoDir() + "/" + objectName.replace("/", "__");
-                    logger.debug("Adding new datakey " + dataKey);
-                    fileIds[1] = authDB.newFile(keyName, fileIds[0], canUser, dataKey, schemeType);
+                    String pubPerms = perms + authDB.getPermissionsPublic(fileIds[0]);
+                    perms = authDB.getPermissions(fileIds[0], canUser) + pubPerms;
+                    int ndx = perms.indexOf('w');
+                    if(ndx < 0)
+                    {
+                        throw new ResourceRequestDeniedException("user " + userId + " does not have write access the bucket " + url);
+                    }
                 }                
-                if(fileIds[1] < 0)
+                else if(fileIds[1] < 0)
                 {                                                                                                 
                     throw new ResourceRequestDeniedException("the object " + objectName + " was not found.");
                 }
-
-                String pubPerms = perms + authDB.getPermissionsPublic(fileIds[1]);
-                perms = authDB.getPermissions(fileIds[1], canUser) + pubPerms;
-                int ndx = perms.indexOf('r');
-                if(ndx < 0)
+                else
                 {
-                    throw new ResourceRequestDeniedException("user " + userId + " canonical ID " + canUser + " does not have read access to " + url);
-                }
-                long size = authDB.getFileSize(fileIds[1]);
-                if(write)
-                {
-                    ndx = perms.indexOf('w');
+                    String pubPerms = perms + authDB.getPermissionsPublic(fileIds[1]);
+                    perms = authDB.getPermissions(fileIds[1], canUser) + pubPerms;
+                    int ndx = perms.indexOf('r');
                     if(ndx < 0)
                     {
-                        throw new ResourceRequestDeniedException("user " + userId + " does not have write access to " + url);
+                        throw new ResourceRequestDeniedException("user " + userId + " canonical ID " + canUser + " does not have read access to " + url);
                     }
-
+                    size = authDB.getFileSize(fileIds[1]);
+                    if(write)
+                    {
+                        ndx = perms.indexOf('w');
+                        if(ndx < 0)
+                        {
+                            throw new ResourceRequestDeniedException("user " + userId + " does not have write access to " + url);
+                        }
+                    }
+                }
+                if(write)
+                {
                     // expected size is only zero when replacing the original file.  in this case we assume it will
                     // fit
                     if(expectedSize != 0)
@@ -355,11 +418,11 @@ public class AuthzDecisionLogic extends DecisionLogic
                         // is ok if it goes negative
                         long canFitSize = expectedSize - size;
                         boolean quota = authDB.canStore(canFitSize, canUser, schemeType);
-                        if(!quota)
+                        if (!quota)
                         {
                             throw new ResourceRequestDeniedException("You do not have enough storage space for the new image.  Please free up some storage and try again");
                         }
-                    }
+                    }                    
                 }
                 return size;
             }
@@ -424,8 +487,10 @@ public class AuthzDecisionLogic extends DecisionLogic
     }
 
     public void unpropagationFinished(
-        String                          publicName)
-        throws WorkspaceException
+        String                          publicName,
+        String                          creatorID,
+        VirtualMachine                  vm)
+            throws WorkspaceException
     {
         try
         {
@@ -433,35 +498,40 @@ public class AuthzDecisionLogic extends DecisionLogic
             String scheme = urlParts[0];
             String hostport = urlParts[1];
             String objectName = urlParts[2];
+            String [] results = objectName.split("/", 2);
+            String bucketName = results[0];
+            String keyName = results[1];
+
 
             int schemeType = -1;
             if(scheme.equals("cumulus"))
             {
                 schemeType = AuthzDBAdapter.OBJECT_TYPE_S3;
+                String canUser = authDB.getCanonicalUserIdFromDn(creatorID);
                 int [] fileIds = this.cumulusGetFileID(hostport, objectName);
+                String datakey;
+                boolean new_file = false;
+                long expectedSize = 0;
+
                 if (fileIds[1] < 0) {
-                    throw new WorkspaceException("Unpropagation target was not prepared " +
-                            "correctly in the database, cannot unpropagate.");
+                    new_file = true;
+                    String unpropurl = translateExternaltoInternal(publicName, vm);
+                    String [] unpropurlParts = this.parseUrl(unpropurl);
+                    datakey = unpropurlParts[2];
                 }
-
-                String datakey = authDB.getDataKey(fileIds[1]);
-
-                // need to calculate the md5sum and set the size
-                // for now lets just set the size
-                File f = new File(datakey);
-                if(!f.exists())
+                else
                 {
-                    throw new WorkspaceException("The unpropagated file does not exist " + publicName);
+                    datakey = authDB.getDataKey(fileIds[1]);
+                    expectedSize = authDB.getFileSize(fileIds[1]);
                 }
+                File f = new File(datakey);               
                 long size = f.length();
-                long expectedSize = authDB.getFileSize(fileIds[1]);
                 long sizeDiff = size - expectedSize;
 
                 // if the size of the file grew from what it was expected to be we must make sure the quota
                 // is not busted
                 if(sizeDiff > 0)
                 {
-                    String canUser = authDB.getFileOwner(fileIds[1]);
                     boolean hasRoom = authDB.canStore(sizeDiff, canUser, schemeType);
                     if(!hasRoom)
                     {
@@ -511,6 +581,10 @@ public class AuthzDecisionLogic extends DecisionLogic
                     logger.error("Error dealing with the unpropgated file", ioe);
                 }
 
+                if(new_file)
+                {
+                    fileIds[1] = authDB.newFile(keyName, fileIds[0], canUser, datakey, schemeType);
+                }
                 authDB.setFileSize(fileIds[1], size, md5string);
             }
             else

@@ -164,6 +164,19 @@ public class Opts {
     public final Option TIMEOUT_OPT =
         OptionBuilder.hasArg().withLongOpt(TIMEOUT_OPT_STRING).create();
 
+    public static final String COMMON_OPT_STRING = "common";
+    public final Option COMMON_OPT =
+        OptionBuilder.withLongOpt(COMMON_OPT_STRING).create();
+
+
+    public static final String IMAGE_DESC_OPT_STRING = "imagedesc";
+    public final Option IMAGE_DESC_OPT =
+            OptionBuilder.hasArg().withLongOpt(IMAGE_DESC_OPT_STRING).create();
+
+    public static final String NOSPINNER_OPT_STRING = "nospinner";
+    public final Option NOSPINNER_OPT =
+        OptionBuilder.withLongOpt(NOSPINNER_OPT_STRING).create();
+
     public static final String SSH_FILE_OPT_STRING = "ssh-pubkey";
     public final Option SSH_FILE_OPT =
         OptionBuilder.hasArg().withLongOpt(SSH_FILE_OPT_STRING).create();
@@ -258,6 +271,9 @@ public class Opts {
                                                  this.HOURS_OPT,
                                                  this.DEBUG_OPT,
                                                  this.TIMEOUT_OPT,
+                                                 this.COMMON_OPT,
+                                                 this.IMAGE_DESC_OPT,
+                                                 this.NOSPINNER_OPT,
                                                  this.SSH_FILE_OPT,
                                                  this.POLL_INTERVAL_OPT,
                                                  this.NOTIFICATIONS_OPT,

@@ -161,8 +161,8 @@ def test_mock_create():
     assert running_vm
     
     assert running_vm.wchandle == handle
-    assert running_vm.maxmem == 256
-    assert running_vm.curmem == 256
+    assert running_vm.maxmem == 262144
+    assert running_vm.curmem == 262144
     assert running_vm.running
     assert not running_vm.blocked
     assert not running_vm.paused
@@ -493,7 +493,7 @@ def test_real_procurement_unpropagate3():
     (opts, args) = parser.parse_args(createargs)
     
     p,c = get_pc(opts, realconfigs())
-    c.log.debug("test_real_procurement_unpropagate2()")
+    c.log.debug("test_real_procurement_unpropagate3()")
     
     procure_cls = c.get_class_by_keyword("ImageProcurement")
     procure = procure_cls(p, c)
@@ -506,6 +506,25 @@ def test_real_procurement_unpropagate3():
         invalid_input = True
     assert invalid_input
     
+def test_real_procurement_unpropagate4():
+    """Test the procurement adapter unpropagate with new name"""
+    
+    handle = "wrksp-2133"
+    createargs = ["--action", "unpropagate", 
+                  "--name", handle,
+                  "--images", "http://somehost/some-base-cluster-01.gz",
+                  "--unproptargets", "scp://somehost/some-base-cluster-02.gz"
+                 ]
+    parser = wc_optparse.parsersetup()
+    (opts, args) = parser.parse_args(createargs)
+    
+    p,c = get_pc(opts, mockconfigs(basename="httpenabled.conf"))
+    c.log.debug("test_real_procurement_unpropagate4()")
+    
+    procure_cls = c.get_class_by_keyword("ImageProcurement")
+    procure = procure_cls(p, c)
+    procure.validate()
+    assert procure.lengthy_shutdown()
 
 def test_notification():
     """Test notification validation (negative1)"""
@@ -875,11 +894,16 @@ def test_network_security1():
     
     # test that there is an error if that dhcpvifname is missing:
     invalid_input = False
+    # force setting this to true.  this test is from the days when local
+    # dhcp was default (and mandatory?)
+    netsecurity.localdhcp = True
     try:
         netsecurity.setup(nic_set)
     except InvalidInput:
         invalid_input = True
     assert invalid_input
+    # setlocal dhcp back to false
+    netsecurity.localdhcp = False
     
     # run nic_set through bootstrap, as intended
     netbootstrap.setup(nic_set)

@@ -19,19 +19,23 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.globus.workspace.network.Association;
+import org.globus.workspace.network.AssociationEntry;
+import org.globus.workspace.persistence.PersistenceAdapter;
+import org.globus.workspace.persistence.WorkspaceDatabaseException;
 import org.globus.workspace.remoting.admin.NodeReport;
-import org.globus.workspace.remoting.admin.RemoteNodeManagement;
+import org.nimbustools.api.services.admin.RemoteNodeManagement;
 import org.globus.workspace.remoting.admin.VmmNode;
 import org.globus.workspace.scheduler.NodeExistsException;
 import org.globus.workspace.scheduler.NodeInUseException;
 import org.globus.workspace.scheduler.NodeManagement;
+import org.globus.workspace.scheduler.NodeManagementDisabled;
 import org.globus.workspace.scheduler.NodeNotFoundException;
 import org.globus.workspace.scheduler.defaults.ResourcepoolEntry;
+import org.springframework.remoting.RemoteAccessException;
 
 import java.rmi.RemoteException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
 
@@ -41,7 +45,8 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
     private final Gson gson;
     private final TypeToken<Collection<VmmNode>> vmmNodeCollectionTypeToken;
 
-    private NodeManagement nodeManagement;
+    private NodeManagement nodeManagement = null;
+    private PersistenceAdapter persistenceAdapter;
 
     public DefaultRemoteNodeManagement() {
         this.gson = new Gson();
@@ -50,7 +55,7 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
 
     public void initialize() throws Exception {
          if (nodeManagement == null) {
-             throw new IllegalArgumentException("nodeManagement may not be null");
+             logger.warn("Node management disabled");
          }
     }
 
@@ -94,16 +99,40 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
                 logger.info("VMM node " + hostname + " already existed");
                 reports.add(new NodeReport(hostname,
                         NodeReport.STATE_NODE_EXISTS, null));
+            } catch (NodeManagementDisabled e) {
+                throw new RemoteException(e.getMessage());
+            } catch (WorkspaceDatabaseException e) {
+                throw new RemoteException(e.getMessage());
             }
         }
         return gson.toJson(reports);
     }
 
-    public String listNodes() {
+    /**
+     * If a mgmt ooperation is attempted and there is no active node management instance,
+     * return a disabled message.
+     */
+    private void checkActive() throws RemoteException {
+        if (this.nodeManagement == null) {
+            throw new RemoteException("Remote node administration is disabled. " +
+                    "Are you in pilot mode?");
+        }
+    }
 
+    public String listNodes() throws RemoteException {
+
+        checkActive();
+        
         logger.debug("Listing VMM nodes");
 
-        final List<ResourcepoolEntry> entries = nodeManagement.getNodes();
+        final List<ResourcepoolEntry> entries;
+        try {
+            entries = nodeManagement.getNodes();
+        } catch (NodeManagementDisabled e) {
+            throw new RemoteException(e.getMessage());
+        } catch (WorkspaceDatabaseException e) {
+            throw new RemoteException(e.getMessage());
+        }
         final List<VmmNode> nodes = new ArrayList<VmmNode>(entries.size());
         for (ResourcepoolEntry entry : entries) {
             nodes.add(translateResourcepoolEntry(entry));
@@ -112,7 +141,7 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
         return gson.toJson(nodes);
     }
 
-    public String getNode(String hostname) {
+    public String getNode(String hostname) throws RemoteException {
 
         if (hostname == null) {
             throw new IllegalArgumentException("hostname may not be null");
@@ -121,7 +150,14 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
         logger.debug("Listing VMM node " + hostname);
 
 
-        final ResourcepoolEntry entry = nodeManagement.getNode(hostname);
+        final ResourcepoolEntry entry;
+        try {
+            entry = nodeManagement.getNode(hostname);
+        } catch (NodeManagementDisabled e) {
+            throw new RemoteException(e.getMessage());
+        } catch (WorkspaceDatabaseException e) {
+            throw new RemoteException(e.getMessage());
+        }
         return gson.toJson(translateResourcepoolEntry(entry));
     }
 
@@ -129,7 +165,8 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
                               Boolean active,
                               String pool,
                               Integer memory,
-                              String networks) {
+                              String networks) throws RemoteException {
+
         if (hostnames == null) {
             throw new IllegalArgumentException("hostnames may not be null");
         }
@@ -153,8 +190,13 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
             logger.info("Updating VMM node: " + hostname);
 
             try {
-                final ResourcepoolEntry entry = nodeManagement.updateNode(
-                        hostname, pool, networks, memory, active);
+                final ResourcepoolEntry entry;
+                try {
+                    entry = nodeManagement.updateNode(
+                            hostname, pool, networks, memory, active);
+                } catch (NodeManagementDisabled e) {
+                    throw new RemoteException(e.getMessage());
+                }
 
                 final VmmNode node = translateResourcepoolEntry(entry);
                 reports.add(new NodeReport(hostname, NodeReport.STATE_UPDATED,
@@ -169,18 +211,20 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
                 reports.add(
                         new NodeReport(hostname,
                                 NodeReport.STATE_NODE_NOT_FOUND, null));
+            } catch (WorkspaceDatabaseException e) {
+                throw new RemoteException(e.getMessage());
             }
 
         }
         return gson.toJson(reports);
     }
 
-    public String removeNode(String hostname) {
+    public String removeNode(String hostname) throws RemoteException {
         NodeReport report = _removeNode(hostname);
         return gson.toJson(report);
     }
 
-    private NodeReport _removeNode(String hostname) {
+    private NodeReport _removeNode(String hostname) throws RemoteException {
         if (hostname == null) {
             throw new IllegalArgumentException("hostname may not be null");
         }
@@ -198,13 +242,18 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
                 state = NodeReport.STATE_NODE_NOT_FOUND;
             }
         } catch (NodeInUseException e) {
+            logger.warn("Node in use: " + hostname);
             state = NodeReport.STATE_NODE_IN_USE;
+        } catch (NodeManagementDisabled e) {
+            throw new RemoteException(e.getMessage());
+        } catch (WorkspaceDatabaseException e) {
+            throw new RemoteException(e.getMessage());
         }
 
         return new NodeReport(hostname, state, null);
     }
 
-    public String removeNodes(String[] hostnames) {
+    public String removeNodes(String[] hostnames) throws RemoteException {
         if (hostnames == null || hostnames.length == 0) {
             throw new IllegalArgumentException("hostnames may not be null or empty");
         }
@@ -215,6 +264,85 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
         return gson.toJson(reports);
     }
 
+    public String getAllNetworkPools(int inUse) throws RemoteException {
+        try {
+            Hashtable cAssociations = persistenceAdapter.currentAssociations();
+            List<Association> assocs = new ArrayList<Association>();
+            Enumeration keys = cAssociations.keys();
+
+            while(keys.hasMoreElements()) {
+                Association a = (Association) cAssociations.get(keys.nextElement());
+                assocs.add(a);
+            }
+
+            if(assocs == null || assocs.size() == 0)
+                return null;
+
+            List<AssociationEntry> allEntries = new ArrayList<AssociationEntry>();
+            for(Association assoc: assocs) {
+                Iterator it = assoc.getEntries().iterator();
+                while(it.hasNext()) {
+                    AssociationEntry next = (AssociationEntry) it.next();
+                    if(inUse == ALL_ENTRIES) {
+                        allEntries.add(next);
+                    }
+                    else if(inUse == FREE_ENTRIES) {
+                        if(!next.isInUse())
+                            allEntries.add(next);
+                    }
+                    else if(inUse == USED_ENTRIES) {
+                        if(next.isInUse())
+                            allEntries.add(next);
+                    }
+                }
+            }
+
+            if(allEntries == null || allEntries.isEmpty())
+                return null;
+
+            return gson.toJson(allEntries);
+        }
+        catch(WorkspaceDatabaseException e) {
+            throw new RemoteException(e.getMessage());
+        }
+    }
+
+    public String getNetworkPool(String pool, int inUse) throws RemoteException {
+        try {
+            Hashtable cAssociations = persistenceAdapter.currentAssociations();
+
+            final Association assoc = (Association) cAssociations.get(pool);
+
+            if (assoc == null)
+                return null;
+
+            List<AssociationEntry> entries = new ArrayList<AssociationEntry>();
+            Iterator it = assoc.getEntries().iterator();
+            while(it.hasNext()) {
+                AssociationEntry next = (AssociationEntry) it.next();
+                if(inUse == ALL_ENTRIES) {
+                    entries.add(next);
+                }
+                else if(inUse == FREE_ENTRIES) {
+                    if(!next.isInUse())
+                        entries.add(next);
+                }
+                else if(inUse == USED_ENTRIES) {
+                    if(next.isInUse())
+                        entries.add(next);
+                }
+            }
+
+            if (entries == null || entries.isEmpty())
+                return null;
+
+            return gson.toJson(entries);
+        }
+        catch (WorkspaceDatabaseException e) {
+            throw new RemoteException(e.getMessage());
+        }
+    }
+
     public NodeManagement getNodeManagement() {
         return nodeManagement;
     }
@@ -223,12 +351,19 @@ public class DefaultRemoteNodeManagement implements RemoteNodeManagement {
         this.nodeManagement = nodeManagement;
     }
 
+    public void setPersistenceAdapter(PersistenceAdapter persistenceAdapter) {
+        this.persistenceAdapter = persistenceAdapter;
+    }
+
     private static VmmNode translateResourcepoolEntry(ResourcepoolEntry entry) {
         if (entry == null) {
              return null;
         }
-        return new VmmNode(entry.getHostname(), entry.isActive(),
+        VmmNode vmm = new VmmNode(entry.getHostname(), entry.isActive(),
                 entry.getResourcePool(), entry.getMemMax(),
                 entry.getSupportedAssociations(), entry.isVacant());
+
+        vmm.setMemRemain(entry.getMemCurrent());
+        return vmm;
     }
 }

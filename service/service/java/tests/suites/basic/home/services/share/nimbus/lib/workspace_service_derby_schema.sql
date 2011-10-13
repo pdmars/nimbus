@@ -33,7 +33,9 @@ groupid CHAR(36),
 groupsize INT,
 last_in_group SMALLINT,
 launch_index INT,
-error_fault BLOB
+error_fault BLOB,
+client_token VARCHAR(64),
+charge_ratio DOUBLE NOT NULL
 );
 
 --
@@ -43,6 +45,20 @@ CREATE TABLE groupresources
 (
 groupid CHAR(36) NOT NULL PRIMARY KEY,
 creator_dn VARCHAR(512)
+);
+
+--
+-- Persistence for resource creation idempotency:
+
+CREATE TABLE idempotency
+(
+creator_dn VARCHAR(512) NOT NULL,
+client_token VARCHAR(64) NOT NULL,
+vmid INT NOT NULL,
+groupid CHAR(36),
+name VARCHAR(100) NOT NULL,
+launch_index INT,
+PRIMARY KEY (creator_dn, client_token, vmid)
 );
 
 
@@ -61,7 +77,9 @@ kernel_parameters VARCHAR(128),
 vmm VARCHAR(32),
 vmm_version VARCHAR(32),
 assocs_needed VARCHAR(256),
-md_user_data VARCHAR(30720)
+md_user_data VARCHAR(30720),
+preemptable SMALLINT,
+credential_name VARCHAR(128)
 );
 
 --
@@ -77,7 +95,7 @@ rootdisk SMALLINT NOT NULL,
 blankspace INT NOT NULL,
 prop_required SMALLINT NOT NULL,
 unprop_required SMALLINT NOT NULL,
-alternate_unprop VARCHAR(128)
+alternate_unprop VARCHAR(4096)
 );
 
 --
@@ -117,14 +135,14 @@ PRIMARY KEY(association,ipaddress)
 );
 
 --
--- Persistence for file customization tasks
+-- Persistence for file copy tasks
 
-CREATE TABLE vm_customization
+CREATE TABLE file_copy
 (
 vmid INT NOT NULL,
-sourcepath VARCHAR(32) NOT NULL,
-destpath VARCHAR(512) NOT NULL,
-sent SMALLINT NOT NULL
+sourcepath VARCHAR(36) NOT NULL,
+destpath VARCHAR(512),
+on_image SMALLINT NOT NULL
 );
 
 --
@@ -157,26 +175,18 @@ CREATE TABLE default_scheduler_done_ensemb
 coschedid CHAR(36) NOT NULL
 );
 
---
--- Persistence for default resource pool:
-
-CREATE TABLE resourcepools
-(
-resourcepool VARCHAR(128) NOT NULL PRIMARY KEY,
-file_time BIGINT NOT NULL
-);
-
 -- using REAL for memory attributs to allow
 -- real division operations in ORDER BY statements
 
 CREATE TABLE resourcepool_entries
 (
 resourcepool VARCHAR(128) NOT NULL,
-hostname VARCHAR(128) NOT NULL,
+hostname VARCHAR(128) NOT NULL PRIMARY KEY,
 associations VARCHAR(512) NOT NULL,
 maximum_memory REAL,
 available_memory REAL,
-PRIMARY KEY(resourcepool, hostname)
+active SMALLINT NOT NULL DEFAULT 1,
+preemptable_memory REAL
 );
 
 --
@@ -207,6 +217,16 @@ position BIGINT
 );
 
 --
+-- Spot Instances:
+
+CREATE TABLE spot_prices
+(
+tstamp BIGINT NOT NULL,
+price DOUBLE NOT NULL,
+PRIMARY KEY(tstamp, price)
+);
+
+--
 -- Other:
 
 CREATE TABLE counter
@@ -219,3 +239,126 @@ CREATE TABLE notification_position
 (
 position BIGINT
 );
+
+CREATE TABLE backfill
+(
+id INT NOT NULL PRIMARY KEY,
+enabled SMALLINT NOT NULL,
+max_instances INT NOT NULL,
+disk_image VARCHAR(512) NOT NULL,
+site_capacity INT NOT NULL,
+repo_user VARCHAR(512) NOT NULL,
+instance_mem SMALLINT NOT NULL
+);
+
+--
+-- Persistence for AsyncRequests
+CREATE TABLE async_requests
+(
+id VARCHAR(512) NOT NULL PRIMARY KEY,
+max_bid DOUBLE,
+spot SMALLINT,
+persistent SMALLINT,
+creator_dn VARCHAR(512),
+creator_is_superuser SMALLINT,
+group_id VARCHAR(512),
+ssh_key_name VARCHAR(512),
+creation_time BIGINT,
+nics VARCHAR(512),
+status VARCHAR(512)
+);
+
+-- Persistence for AsyncRequest list of NICs
+--CREATE TABLE async_requests_vms
+--(
+--id VARCHAR(512),
+--vmid INT
+--);
+
+--
+-- Persistence for async virtual machines:
+
+CREATE TABLE async_requests_vms
+(
+async_id VARCHAR(512) NOT NULL,
+binding_index INT NOT NULL,
+id INT NOT NULL,
+name VARCHAR(128) NOT NULL,
+node VARCHAR(128),
+prop_required SMALLINT NOT NULL,
+unprop_required SMALLINT NOT NULL,
+network VARCHAR(1024),
+kernel_parameters VARCHAR(128),
+vmm VARCHAR(32),
+vmm_version VARCHAR(32),
+assocs_needed VARCHAR(256),
+md_user_data VARCHAR(30720),
+preemptable SMALLINT,
+credential_name VARCHAR(128),
+PRIMARY KEY (async_id, binding_index, id)
+);
+
+--
+-- Persistence for async vm deployment-time data:
+
+CREATE TABLE async_requests_vm_deployment
+(
+async_id VARCHAR(512) NOT NULL,
+binding_index INT NOT NULL,
+vmid INT NOT NULL,
+requested_state SMALLINT,
+requested_shutdown SMALLINT,
+min_duration INT,
+ind_physmem INT,
+ind_physcpu INT
+);
+
+--
+-- async VM partitions
+
+CREATE TABLE async_requests_vm_partitions
+(
+async_id VARCHAR(512) NOT NULL,
+binding_index INT NOT NULL,
+vmid INT NOT NULL,
+image VARCHAR(4096) NOT NULL,
+imagemount VARCHAR(128) NOT NULL,
+readwrite SMALLINT NOT NULL,
+rootdisk SMALLINT NOT NULL,
+blankspace INT NOT NULL,
+prop_required SMALLINT NOT NULL,
+unprop_required SMALLINT NOT NULL,
+alternate_unprop VARCHAR(4096)
+);
+
+--
+-- Persistence for async vm file copy tasks
+
+CREATE TABLE async_requests_vm_file_copy
+(
+async_id VARCHAR(512) NOT NULL,
+binding_index INT NOT NULL,
+vmid INT NOT NULL,
+sourcepath VARCHAR(36) NOT NULL,
+destpath VARCHAR(512),
+on_image SMALLINT NOT NULL
+);
+
+CREATE TABLE async_requests_allocated_vms
+(
+id VARCHAR(512) NOT NULL,
+vmid INT NOT NULL
+);
+
+CREATE TABLE async_requests_finished_vms
+(
+id VARCHAR(512) NOT NULL,
+vmid INT NOT NULL
+);
+
+CREATE TABLE async_requests_to_be_preempted
+(
+id VARCHAR(512) NOT NULL,
+vmid INT NOT NULL
+);
+

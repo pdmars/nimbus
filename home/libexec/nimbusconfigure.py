@@ -196,8 +196,8 @@ class ARGS:
     IMPORTPREV_LONG= "--import-prev"
     IMPORTPREV_HELP = "[Only used programmatically]"
 
-    IMPORTVMMS_LONG= "--import-vmms"
-    IMPORTVMMS_HELP = "Import VMMs from an old-style 'vmm-pools' directory"
+    IMPORTVMMS_LONG= "--import-2.5-vmms"
+    IMPORTVMMS_HELP = "Import VMMs from an old-style 2.5 'vmm-pools' directory"
     
     IMPORTCUMUDB_LONG= "--import-cumulusdb"
     IMPORTCUMUDB_HELP = "[Only used programmatically]"

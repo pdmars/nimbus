@@ -56,6 +56,7 @@ public interface WorkspaceConstants {
     // c) subtracting STATE_CORRUPTED from a state with value greater than
     //    STATE_CORRUPTED tells you the state the resource would have been
     //    moved to if something did not go wrong (example below)
+    // d) there are two special cases to these rules: STATE_DESTROY_FAILED, STATE_DESTROY_SUCCEEDED
 
     public static final int STATE_FIRST_LEGAL = 0;
     public static final int STATE_UNSTAGED = 0;
@@ -91,6 +92,8 @@ public interface WorkspaceConstants {
     public static final int STATE_CANCELLING_STAGING_OUT = 27;
 
     public static final int STATE_DESTROYING = 28;
+    public static final int STATE_DESTROY_FAILED = -128; // See TerminateSuite notes
+    public static final int STATE_DESTROY_SUCCEEDED = -256; // See TerminateSuite notes
     public static final int STATE_CORRUPTED_GENERIC = 29;
 
     // STATE_CORRUPTED means Corrupted-Unstaged, meaning resource was about
@@ -102,5 +105,5 @@ public interface WorkspaceConstants {
 
     public static final int STATE_LAST_LEGAL
                                 = STATE_CORRUPTED + STATE_DESTROYING;
-
+    
 }

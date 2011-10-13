@@ -3,14 +3,11 @@
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xmlns:jaxrs="http://cxf.apache.org/jaxrs"
-       xmlns:aop="http://www.springframework.org/schema/aop"
        xmlns:security="http://www.springframework.org/schema/security"
        xsi:schemaLocation="
 http://www.springframework.org/schema/beans 
 http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
-http://www.springframework.org/schema/aop 
-http://www.springframework.org/schema/aop/spring-aop.xsd
-http://www.springframework.org/schema/security 
+http://www.springframework.org/schema/security
 http://www.springframework.org/schema/security/spring-security-3.0.xsd
 http://cxf.apache.org/jaxrs
 http://cxf.apache.org/schemas/jaxrs.xsd">
@@ -49,11 +46,29 @@ http://cxf.apache.org/schemas/jaxrs.xsd">
         <property name="userDetailsService" ref="userDetailsService"/>
     </bean>
 
+    <bean id="other.AuthzDataSource"
+         class="org.apache.commons.dbcp.BasicDataSource">
+       <property name="driverClassName" value="org.sqlite.JDBC" />
+       <property name="maxActive" value="10" />
+       <property name="maxIdle" value="4" />
+       <property name="maxWait" value="2000" />
+       <property name="poolPreparedStatements" value="true" />
 
-    <bean id="userDetailsService" class="org.nimbustools.messaging.query.security.FileUserDetailsService">
-        <constructor-arg value="$QUERY{query.usermap.path}"/>
+       <property name="url"
+                 value="jdbc:sqlite://$CUMULUS{cumulus.authz.db}" />
+       <property name="username" value="nimbus"/>
+       <property name="password" value="nimbus"/>
+   </bean>
+
+    <bean id="authzDBAdapter" class="org.nimbus.authz.AuthzDBAdapter">
+        <constructor-arg ref="other.AuthzDataSource"/>
+
+        <property name="cumulusPublicUser" value="$CUMULUS{cumulus.publicuser}" />
     </bean>
 
+    <bean id="userDetailsService" class="org.nimbustools.messaging.query.security.NimbusAuthzUserDetailsService">
+        <property name="authzDBAdapter" ref="authzDBAdapter" />
+    </bean>
 
     <bean id="elasticQuery" class="org.nimbustools.messaging.query.ElasticQuery">
         <property name="versions">
@@ -91,6 +106,10 @@ http://cxf.apache.org/schemas/jaxrs.xsd">
         <constructor-arg ref="nimbus-query.rm.terminate" />
         <constructor-arg ref="nimbus-query.rm.reboot" />
         <constructor-arg ref="nimbus-query.rm.describe" />
+        <constructor-arg ref="nimbus-query.rm.requestSI" />
+        <constructor-arg ref="nimbus-query.rm.cancelSI" />
+        <constructor-arg ref="nimbus-query.rm.describeSI" /> 
+        <constructor-arg ref="nimbus-query.rm.spHistory" />                               
         <constructor-arg ref="nimbus-query.rm.containerInterface" />
         <constructor-arg ref="nimbus-query.rm.modulelocator" />
 
@@ -142,14 +161,49 @@ http://cxf.apache.org/schemas/jaxrs.xsd">
         <constructor-arg ref="userDetailsService" />
     </bean>
 
+    <bean id="nimbus-elastic.rm.persistence"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.defaults.DefaultElasticPersistence"
+            init-method="initialize">
+        <constructor-arg value="$OTHER_ELASTIC{elastic.db}"/>
+    </bean>
 
     <bean id="nimbus-query.rm.idmappings"
-          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultIDMgmt">
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultIDMgmtProxy" />
 
-        <constructor-arg value="$COMMON{caches.dir}" />
+    <!-- ************ Spot Instances *********** -->
+
+    <bean id="nimbus-query.rm.requestSI"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultRequestSI">
+
+        <constructor-arg ref="nimbus-query.general.ra" />
+        <constructor-arg ref="nimbus-query.general.networks" />
+        <constructor-arg ref="nimbus-query.image.repository" />        
+        <constructor-arg ref="nimbus-query.rm.idmappings" />
+        <constructor-arg ref="nimbus-query.rm.describe" />
+        <constructor-arg ref="nimbus-query.rm.describeSI" />    
+        <constructor-arg ref="nimbus-query.rm.cancelSI" />                    
+        <constructor-arg ref="nimbus-query.rm.containerInterface" />
+        <constructor-arg ref="nimbus-query.security.sshkeys" />
+        <constructor-arg ref="nimbus-query.rm.modulelocator" />
 
     </bean>
 
+    <bean id="nimbus-query.rm.cancelSI"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultCancelSI" />
+
+    <bean id="nimbus-query.rm.describeSI"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultDescribeSI">
+
+        <constructor-arg ref="nimbus-query.rm.idmappings" />
+        <constructor-arg ref="nimbus-query.rm.describe" />
+        <constructor-arg ref="nimbus-query.general.ra" />
+    </bean>
+    
+    <bean id="nimbus-query.rm.spHistory"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultDescribeSpotPriceHistory">
+          
+        <constructor-arg ref="nimbus-query.general.ra" />
+    </bean>
 
     <!-- ************ ServiceGeneral *********** -->
 
@@ -176,6 +230,7 @@ http://cxf.apache.org/schemas/jaxrs.xsd">
          <property name="largeName" value="$OTHER_ELASTIC{ra.name.large}" />
          <property name="xlargeName" value="$OTHER_ELASTIC{ra.name.xlarge}" />
          <property name="unknownString" value="$OTHER_ELASTIC{ra.name.unknown}" />
+         <property name="siType" value="$ASYNC{async.instancetype}" />
 
          <property name="cpuArch" value="$OTHER_ELASTIC{cpu.arch}" />
          <property name="vmmType" value="$OTHER_ELASTIC{vmm.type}" />
@@ -224,8 +279,7 @@ http://cxf.apache.org/schemas/jaxrs.xsd">
           class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.security.defaults.DefaultSSHKeys"
           init-method="validate">
 
-        <!-- key cache provider -->
-        <constructor-arg ref="nimbus-query.rm.idmappings" />
+        <constructor-arg ref="nimbus-elastic.rm.persistence" />
         <property name="pubkeyOnly" value="$ELASTIC{ssh.pubkey.only}" />
         <property name="splitToken" value="$ELASTIC{ssh.split.token}" />
 
@@ -254,21 +308,34 @@ http://cxf.apache.org/schemas/jaxrs.xsd">
 
     </bean>
 
-    <bean id="nimbus-query.image.repository"
-          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.defaults.DefaultRepository"
+     <bean id="nimbus-query.image.repository"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.defaults.CumulusRepository"
           init-method="validate">
 
         <constructor-arg ref="nimbus-query.rm.containerInterface" />
         <constructor-arg ref="nimbus-query.rm.modulelocator" />
+        <constructor-arg ref="other.AuthzDataSource" />
+        <constructor-arg ref="other.repo-imageLocator" />
 
-        <property name="baseDirectory" value="$ELASTIC{base.directory.url}" />
-        <property name="scheme" value="$ELASTIC{propagation.method}" />
+        <property name="cumulusPublicUser" value="$CUMULUS{cumulus.publicuser}" />
+        <property name="repoBucket" value="$CUMULUS{cumulus.repo.bucket}" />
+        <property name="prefix" value="$CUMULUS{cumulus.repo.prefix}" />
+        <property name="rootFileMountAs" value="$OTHER_ELASTIC{rootfile.mountas}" />
+         
+    </bean>
+
+    <bean id="other.repo-imageLocator"
+          class="org.nimbus.authz.CumulusImageLocator"
+          init-method="validate">
+
+        <constructor-arg ref="other.AuthzDataSource" />
+
+        <property name="repoBucket" value="$CUMULUS{cumulus.repo.bucket}" />
+        <property name="prefix" value="$CUMULUS{cumulus.repo.prefix}" />
+        <property name="cumulusHost" value="$CUMULUS{cumulus.host}" />
         <property name="rootFileMountAs" value="$OTHER_ELASTIC{rootfile.mountas}" />
 
-        <property name="enableListing" value="$ELASTIC{repository.listing.enabled}" />
-        <property name="idAuthz" value="$ELASTIC{repository.idauthz}" />
-
-    </bean>
+   </bean>
 
 
     <!--
@@ -277,4 +344,3 @@ http://cxf.apache.org/schemas/jaxrs.xsd">
     <import resource="main.conflocator.xml"/>
 
 </beans>
-

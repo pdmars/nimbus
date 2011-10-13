@@ -189,8 +189,9 @@ The following features of S3 are not currently implemented in cumulus
 - Location
 - Logging
 - Object POST
-- Object COPY
 - torrent
 
-When using s3cmd it seems that all buckets must start with a capital 
-letter.
+When using s3cmd it seems that all buckets must start with a capital
+letter. However, some old versions of s3cmd (like the 0.9.8.3 version
+shipping with Debian Lenny) will not accept a bucket starting with a
+capital letter. Upgrade your copy of s3cmd to avoid this problem.

@@ -15,36 +15,19 @@
  */
 package org.globus.workspace.remoting.admin.client;
 
-import com.google.gson.Gson;
 import org.apache.commons.cli.*;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.log4j.*;
-import org.apache.log4j.varia.NullAppender;
-import org.globus.workspace.remoting.RemotingClient;
+import org.globus.workspace.network.AssociationEntry;
 import org.globus.workspace.remoting.admin.NodeReport;
 import org.globus.workspace.remoting.admin.VmmNode;
-import org.globus.workspace.remoting.admin.RemoteNodeManagement;
-import org.nimbustools.api.brain.NimbusHomePathResolver;
+import org.nimbustools.api.services.admin.RemoteNodeManagement;
 
 import java.io.*;
-import java.rmi.NotBoundException;
-import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.util.*;
 
 
-public class AdminClient {
+public class AdminClient extends RMIConfig {
 
-    private static final Log logger =
-            LogFactory.getLog(AdminClient.class.getName());
-
-    public static final int EXIT_OK = 0;
-    public static final int EXIT_PARAMETER_PROBLEM = 1;
-    public static final int EXIT_EXECUTION_PROBLEM = 2;
-    public static final int EXIT_UNKNOWN_PROBLEM = 3;
-
-    private static final String PROP_SOCKET_DIR = "socket.dir";
     private static final String PROP_RMI_BINDING_NODEMGMT_DIR = "rmi.binding.nodemgmt";
     private static final String PROP_DEFAULT_MEMORY = "node.memory.default";
     private static final String PROP_DEFAULT_NETWORKS = "node.networks.default";
@@ -53,15 +36,22 @@ public class AdminClient {
     private static final String FIELD_HOSTNAME = "hostname";
     private static final String FIELD_POOL = "pool";
     private static final String FIELD_MEMORY = "memory";
+    private static final String FIELD_MEM_REMAIN = "memory available";
     private static final String FIELD_NETWORKS = "networks";
     private static final String FIELD_ACTIVE = "active";
     private static final String FIELD_IN_USE = "in_use";
     private static final String FIELD_RESULT = "result";
 
+    private static final String FIELD_IP = "ip";
+    private static final String FIELD_MAC = "mac";
+    private static final String FIELD_BROADCAST = "broadcast";
+    private static final String FIELD_SUBNET_MASK = "subnet mask";
+    private static final String FIELD_GATEWAY = "gateway";
+    private static final String FIELD_EXPLICIT_MAC = "explicit mac";
 
     final static String[] NODE_FIELDS = new String[] {
-            FIELD_HOSTNAME, FIELD_POOL, FIELD_MEMORY, FIELD_NETWORKS,
-            FIELD_IN_USE, FIELD_ACTIVE };
+            FIELD_HOSTNAME, FIELD_POOL, FIELD_MEMORY, FIELD_MEM_REMAIN,
+            FIELD_NETWORKS, FIELD_IN_USE, FIELD_ACTIVE };
 
 
     final static String[] NODE_REPORT_FIELDS = new String[] {
@@ -72,7 +62,12 @@ public class AdminClient {
     final static String[] NODE_REPORT_FIELDS_SHORT = new String[] {
             FIELD_HOSTNAME, FIELD_RESULT};
 
-    private final Gson gson = new Gson();
+    final static String[] NODE_ALLOCATION_FIELDS = new String[] {
+            FIELD_HOSTNAME, FIELD_IP, FIELD_MAC, FIELD_BROADCAST,
+            FIELD_SUBNET_MASK, FIELD_GATEWAY, FIELD_IN_USE, FIELD_EXPLICIT_MAC
+    };
+
+
 
     private AdminAction action;
     private List<String> hosts;
@@ -84,36 +79,11 @@ public class AdminClient {
     private String nodePool;
     private boolean nodeActive = true;
     private boolean nodeActiveConfigured;
+    private int inUse = 0;
 
-    private String configPath;
-    private File socketDirectory;
-    private String nodePoolBindingName;
     private RemoteNodeManagement remoteNodeManagement;
-    private Reporter reporter;
-    private OutputStream outStream;
 
     public static void main(String args[]) {
-
-        // early check for debug options
-        boolean isDebug = false;
-        final String debugFlag = "--" + Opts.DEBUG_LONG;
-        for (String arg : args) {
-            if (debugFlag.equals(arg)) {
-                isDebug = true;
-                break;
-            }
-        }
-
-        if (isDebug) {
-
-            final PatternLayout layout = new PatternLayout("%C{1}:%L - %m%n");
-            final ConsoleAppender consoleAppender = new ConsoleAppender(layout, "System.err");
-            BasicConfigurator.configure(consoleAppender);
-
-            logger.info("Debug mode enabled");
-        } else {
-            BasicConfigurator.configure(new NullAppender());
-        }
 
         Throwable anyError = null;
         ParameterProblem paramError = null;
@@ -121,6 +91,7 @@ public class AdminClient {
         int ret = EXIT_OK;
         try {
             final AdminClient adminClient = new AdminClient();
+            adminClient.setupDebug(args);
             adminClient.run(args);
 
         } catch (ParameterProblem e) {
@@ -166,12 +137,13 @@ public class AdminClient {
         this.loadArgs(args);
 
         if (this.action == AdminAction.Help) {
-            System.out.println(getHelpText());
+            InputStream is = AdminClient.class.getResourceAsStream("help.txt");
+            System.out.println(super.getHelpText(is));
             return;
         }
 
-        this.loadConfig(this.configPath);
-        this.setupRemoting();
+        this.loadAdminClientConfig();
+        this.remoteNodeManagement = (RemoteNodeManagement) super.setupRemoting();
 
         switch (this.action) {
             case AddNodes:
@@ -185,6 +157,9 @@ public class AdminClient {
                 break;
             case UpdateNodes:
                 run_updateNodes();
+                break;
+            case PoolAvailability:
+                run_poolAvail();
                 break;
         }
     }
@@ -277,7 +252,7 @@ public class AdminClient {
                     hostnames, active, resourcepool, memory, networks);
             reports = gson.fromJson(reportJson, NodeReport[].class);
         } catch (RemoteException e) {
-            handleRemoteException(e);
+            super.handleRemoteException(e);
         }
 
         try {
@@ -287,97 +262,47 @@ public class AdminClient {
         }
     }
 
-    private void setupRemoting() throws ExecutionProblem {
-        final RemotingClient client = new RemotingClient();
-        client.setSocketDirectory(this.socketDirectory);
-
+    private void run_poolAvail() throws ExecutionProblem {
+        AssociationEntry[] entries = null;
         try {
-            client.initialize();
-        } catch (RemoteException e) {
-            handleRemoteException(e);
-        }
-
-        try {
-            final Remote remote = client.lookup(this.nodePoolBindingName);
-            logger.debug("Found remote object " + remote.toString());
-            this.remoteNodeManagement = (RemoteNodeManagement) remote;
-        } catch (RemoteException e) {
-            handleRemoteException(e);
-        } catch (NotBoundException e) {
-            throw new ExecutionProblem("Failed to bind to object '" +
-                    this.nodePoolBindingName +
-                    "'. There may be a configuration problem between the "+
-                    "client and service. Error: "+ e.getMessage(), e);
-        }
-    }
-
-    private void handleRemoteException(RemoteException e) throws ExecutionProblem {
-        throw new ExecutionProblem(
-                "Failed to connect to Nimbus service over domain sockets. "+
-                "Is the service running?\n\nSocket directory: " +
-                this.socketDirectory.getAbsolutePath() + "\n\nError: " +
-                e.getMessage(), e);
-    }
-
-    private void loadConfig(String configPath)
-            throws ParameterProblem, ExecutionProblem {
-        if (configPath == null) {
-            throw new ParameterProblem("Config path is invalid");
-        }
-
-        final File configFile = new File(configPath);
-
-        logger.debug("Loading config file: " + configFile.getAbsolutePath());
-
-        if (!configFile.canRead()) {
-            throw new ParameterProblem(
-                    "Specified config file path does not exist or is not readable: " +
-                            configFile.getAbsolutePath());
-        }
-
-        final Properties props = new Properties();
-        try {
-            FileInputStream inputStream = null;
-            try {
-                inputStream = new FileInputStream(configFile);
-                props.load(inputStream);
-            } finally {
-                if (inputStream != null) {
-                    inputStream.close();
+            if(this.nodePool != null) {
+                final String entriesJson = this.remoteNodeManagement.getNetworkPool(this.nodePool, this.inUse);
+                if(entriesJson == null) {
+                    System.err.println("No entries with pool name " + nodePool + " found");
+                    return;
                 }
+                entries = gson.fromJson(entriesJson, AssociationEntry[].class);
             }
-        } catch (IOException e) {
-            logger.debug("Caught error reading config file " + configFile.getAbsolutePath(), e);
-            throw new ParameterProblem("Failed to load config file: " +
-                    configFile.getAbsolutePath() + ": " + e.getMessage(), e);
+            else {
+                final String entriesJson = this.remoteNodeManagement.getAllNetworkPools(this.inUse);
+                if(entriesJson == null) {
+                    System.err.println("No pool entries found");
+                    return;
+                }
+                entries = gson.fromJson(entriesJson, AssociationEntry[].class);
+            }
+        }
+        catch(RemoteException e) {
+            System.err.println(e.getMessage());
         }
 
-        final String sockDir = props.getProperty(PROP_SOCKET_DIR);
-        if (sockDir == null) {
-            throw new ExecutionProblem("Configuration file is missing "+
-                    PROP_SOCKET_DIR + " entry: " + configFile.getAbsolutePath());
+        try {
+            reporter.report(nodeAllocationToMaps(entries), this.outStream);
         }
-
-        final NimbusHomePathResolver resolver = new NimbusHomePathResolver();
-        String path = resolver.resolvePath(sockDir);
-        if (path == null) {
-            path = sockDir;
+        catch (IOException e) {
+            throw new ExecutionProblem("Problem writing output: " + e.getMessage(), e);
         }
-        this.socketDirectory = new File(path);
+    }
 
-        final String nodePoolBinding = props.getProperty(PROP_RMI_BINDING_NODEMGMT_DIR);
-        if (nodePoolBinding == null) {
-            throw new ExecutionProblem("Configuration file is missing " +
-                    PROP_RMI_BINDING_NODEMGMT_DIR + " entry: "+
-                    configFile.getAbsolutePath());
-        }
-        this.nodePoolBindingName = nodePoolBinding;
 
+    private void loadAdminClientConfig() throws ParameterProblem, ExecutionProblem {
+
+        super.loadConfig(PROP_RMI_BINDING_NODEMGMT_DIR);
 
         // only need node parameter values if doing add-nodes
         if (this.action == AdminAction.AddNodes) {
             if (!this.nodeMemoryConfigured) {
-                final String memString = props.getProperty(PROP_DEFAULT_MEMORY);
+                final String memString = properties.getProperty(PROP_DEFAULT_MEMORY);
                 if (memString != null) {
                     this.nodeMemory = parseMemory(memString);
                     this.nodeMemoryConfigured = true;
@@ -385,12 +310,12 @@ public class AdminClient {
             }
 
             if (this.nodeNetworks == null) {
-                this.nodeNetworks = props.getProperty(PROP_DEFAULT_NETWORKS);
+                this.nodeNetworks = properties.getProperty(PROP_DEFAULT_NETWORKS);
             }
 
             if (this.nodePool == null) {
                 // if missing or invalid, error will come later if this value is actually needed
-                this.nodePool = props.getProperty(PROP_DEFAULT_POOL);
+                this.nodePool = properties.getProperty(PROP_DEFAULT_POOL);
             }
         }
     }
@@ -482,6 +407,20 @@ public class AdminClient {
             if (hostArg != null) {
                 this.hosts = parseHosts(hostArg);
             }
+        } else if (theAction == AdminAction.PoolAvailability) {
+            if(line.hasOption(Opts.POOL)) {
+                final String pool = line.getOptionValue(Opts.POOL);
+                if(pool == null || pool.trim().length() == 0) {
+                    throw new ParameterProblem("Pool name value is empty");
+                }
+                this.nodePool = pool;
+            }
+            if(line.hasOption(Opts.FREE)) {
+                this.inUse = RemoteNodeManagement.FREE_ENTRIES;
+            }
+            if(line.hasOption(Opts.USED)) {
+                this.inUse = RemoteNodeManagement.USED_ENTRIES;
+            }
         }
 
         //finally everything else
@@ -492,7 +431,7 @@ public class AdminClient {
         if (config == null || config.trim().length() == 0) {
             throw new ParameterProblem("Config file path is invalid");
         }
-        this.configPath = config.trim();
+        super.configPath = config.trim();
 
         final boolean batchMode = line.hasOption(Opts.BATCH);
         final boolean json = line.hasOption(Opts.JSON);
@@ -558,41 +497,6 @@ public class AdminClient {
         return memory;
     }
 
-    private static String[] parseFields(String fieldsString, AdminAction action)
-            throws ParameterProblem {
-        final String[] fieldsArray = fieldsString.trim().split("\\s*,\\s*");
-        if (fieldsArray.length == 0) {
-            throw new ParameterProblem("Report fields list is empty");
-        }
-
-        for (String field : fieldsArray) {
-            boolean found = false;
-            for (String actionField : action.fields()) {
-                if (field.equals(actionField)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                throw new ParameterProblem("Report field '"+ field +
-                        "' is not allowed for this action. Allowed fields are: " +
-                        csvString(action.fields()));
-            }
-        }
-
-        return fieldsArray;
-    }
-
-    private static String csvString(String[] fields) {
-        final StringBuilder sb = new StringBuilder();
-        for (String f : fields) {
-            if (sb.length() != 0) {
-                sb.append(", ");
-            }
-            sb.append(f);
-        }
-        return sb.toString();
-    }
     private static List<String> parseHosts(String hostString)
             throws ParameterProblem {
         if (hostString == null) {
@@ -614,43 +518,6 @@ public class AdminClient {
         return hosts;
     }
 
-    private static String getHelpText() {
-
-        InputStream is = null;
-        BufferedInputStream bis = null;
-        try {
-            is = AdminClient.class.getResourceAsStream("help.txt");
-            if (is == null) {
-                return "";
-            }
-
-            bis = new BufferedInputStream(is);
-            StringBuilder sb = new StringBuilder();
-            byte[] chars = new byte[1024];
-            int bytesRead;
-            while( (bytesRead = bis.read(chars)) > -1){
-                sb.append(new String(chars, 0, bytesRead));
-            }
-            return sb.toString();
-
-        } catch (IOException e) {
-            logger.error("Error reading help text", e);
-            return "";
-        } finally {
-            try {
-            if (bis != null) {
-                bis.close();
-            }
-
-            if (is != null) {
-                is.close();
-            }
-            } catch (IOException e) {
-                logger.error("Error reading help text", e);
-            }
-        }
-    }
-
     private static List<Map<String,String>> nodesToMaps(VmmNode[] nodes) {
         List<Map<String,String>> maps = new ArrayList<Map<String, String>>(nodes.length);
         for (VmmNode node : nodes) {
@@ -661,10 +528,11 @@ public class AdminClient {
 
     private static Map<String,String> nodeToMap(VmmNode node) {
         final HashMap<String, String> map =
-                new HashMap<String, String>(5);
+                new HashMap<String, String>(7);
         map.put(FIELD_HOSTNAME, node.getHostname());
         map.put(FIELD_POOL, node.getPoolName());
         map.put(FIELD_MEMORY, String.valueOf(node.getMemory()));
+        map.put(FIELD_MEM_REMAIN, String.valueOf(node.getMemRemain()));
         map.put(FIELD_NETWORKS, node.getNetworkAssociations());
         map.put(FIELD_IN_USE, String.valueOf(!node.isVacant()));
         map.put(FIELD_ACTIVE, String.valueOf(node.isActive()));
@@ -700,15 +568,36 @@ public class AdminClient {
         }
         return map;
     }
+
+    private static List<Map<String,String>> nodeAllocationToMaps(AssociationEntry[] entries) {
+        List<Map<String,String>> maps = new ArrayList<Map<String, String>>(entries.length);
+        for (AssociationEntry entry : entries) {
+            maps.add(nodeAllocationToMap(entry));
+        }
+        return maps;
+    }
+
+    private static Map<String,String> nodeAllocationToMap(AssociationEntry entry) {
+        final HashMap<String, String> map = new HashMap(8);
+        map.put(FIELD_HOSTNAME, entry.getHostname());
+        map.put(FIELD_IP, entry.getIpAddress());
+        map.put(FIELD_MAC, entry.getMac());
+        map.put(FIELD_BROADCAST, entry.getBroadcast());
+        map.put(FIELD_SUBNET_MASK, entry.getSubnetMask());
+        map.put(FIELD_GATEWAY, entry.getGateway());
+        map.put(FIELD_IN_USE, Boolean.toString(entry.isInUse()));
+        map.put(FIELD_EXPLICIT_MAC, Boolean.toString(entry.isExplicitMac()));
+        return map;
+    }
 }
 
-enum AdminAction {
+enum AdminAction implements AdminEnum {
     AddNodes(Opts.ADD_NODES, AdminClient.NODE_REPORT_FIELDS),
     ListNodes(Opts.LIST_NODES, AdminClient.NODE_FIELDS),
     RemoveNodes(Opts.REMOVE_NODES, AdminClient.NODE_REPORT_FIELDS_SHORT),
     UpdateNodes(Opts.UPDATE_NODES, AdminClient.NODE_REPORT_FIELDS),
+    PoolAvailability(Opts.POOL_AVAILABILITY, AdminClient.NODE_ALLOCATION_FIELDS),
     Help(Opts.HELP, null);
-
 
     private final String option;
     private final String[] fields;

@@ -24,26 +24,38 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
-import java.util.*;
-
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.Hashtable;
+import java.util.LinkedList;
+import java.util.List;
 import javax.sql.DataSource;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.globus.workspace.Lager;
 import org.globus.workspace.WorkspaceConstants;
+import org.globus.workspace.async.AsyncRequest;
+import org.globus.workspace.creation.IdempotentInstance;
+import org.globus.workspace.creation.IdempotentReservation;
+import org.globus.workspace.creation.defaults.IdempotentInstanceImpl;
+import org.globus.workspace.creation.defaults.IdempotentReservationImpl;
 import org.globus.workspace.network.Association;
 import org.globus.workspace.network.AssociationEntry;
-import org.globus.workspace.persistence.impls.AssociationPersistenceUtil;
-import org.globus.workspace.persistence.impls.VMPersistence;
-import org.globus.workspace.persistence.impls.VirtualMachinePersistenceUtil;
+import org.globus.workspace.persistence.impls.*;
+import org.globus.workspace.async.backfill.Backfill;
 import org.globus.workspace.scheduler.defaults.ResourcepoolEntry;
 import org.globus.workspace.service.CoschedResource;
 import org.globus.workspace.service.GroupResource;
 import org.globus.workspace.service.InstanceResource;
-import org.globus.workspace.service.binding.vm.CustomizationNeed;
+import org.globus.workspace.service.binding.vm.FileCopyNeed;
 import org.globus.workspace.service.binding.vm.VirtualMachine;
 import org.globus.workspace.service.binding.vm.VirtualMachinePartition;
+import org.nimbustools.api._repr._SpotPriceEntry;
+import org.nimbustools.api.repr.CannotTranslateException;
+import org.nimbustools.api.repr.ReprFactory;
+import org.nimbustools.api.repr.SpotPriceEntry;
 import org.nimbustools.api.services.rm.DoesNotExistException;
 import org.nimbustools.api.services.rm.ManageException;
 
@@ -68,6 +80,7 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
     private final Lager lager;
     private final DataSource dataSource;
     private final boolean dbTrace;
+    private final ReprFactory repr;
 
     // caches, todo: ehcache
     private Hashtable associations;
@@ -79,7 +92,8 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
 
     public PersistenceAdapterImpl(DataSource dataSourceImpl,
                                   Lager lagerImpl,
-                                  DBLoader loader) throws Exception {
+                                  DBLoader loader,
+                                  ReprFactory reprImpl) throws Exception {
         
         if (dataSourceImpl == null) {
             throw new IllegalArgumentException("dataSource may not be null");
@@ -92,6 +106,11 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
         this.lager = lagerImpl;
         this.dbTrace = lagerImpl.dbLog;
 
+        if (reprImpl == null) {
+            throw new IllegalArgumentException("reprImpl may not be null");
+        }
+        this.repr = reprImpl;        
+        
         if (loader == null) {
             throw new IllegalArgumentException("loader may not be null");
         }
@@ -489,11 +508,11 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
         }
     }
 
-    public void addCustomizationNeed(int id, CustomizationNeed need)
+    public void addCustomizationNeed(int id, FileCopyNeed need)
             throws WorkspaceDatabaseException {
         
         if (this.dbTrace) {
-            logger.trace("addCustomizationNeed(): " + Lager.id(id));
+            logger.trace("addFileCopyNeed(): " + Lager.id(id));
         }
 
         if (need == null) {
@@ -504,12 +523,12 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
         PreparedStatement pstmt = null;
         try {
             c = getConnection();
-            pstmt = c.prepareStatement(SQL_INSERT_VM_CUSTOMIZATION);
+            pstmt = c.prepareStatement(SQL_INSERT_FILE_COPY);
 
             pstmt.setInt(1, id);
             pstmt.setString(2, need.sourcePath);
             pstmt.setString(3, need.destPath);
-            if (need.isSent()) {
+            if (need.onImage()) {
                 pstmt.setInt(4, 1);
             } else {
                 pstmt.setInt(4, 0);
@@ -538,20 +557,20 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
         }
     }
     
-    public void setCustomizeTaskSent(int id, CustomizationNeed need)
+    public void setFileCopyOnImage(int id, FileCopyNeed need)
             throws WorkspaceDatabaseException {
 
         if (this.dbTrace) {
-            logger.trace("setCustomizeTaskSent(): " + Lager.id(id) +
-                                            ", sent = " + need.isSent());
+            logger.trace("setFileCopyOnImage(): " + Lager.id(id) +
+                                            ", on image = " + need.onImage());
         }
 
         Connection c = null;
         PreparedStatement pstmt = null;
         try {
             c = getConnection();
-            pstmt = c.prepareStatement(SQL_SET_VM_CUSTOMIZATION_SENT);
-            if (need.isSent()) {
+            pstmt = c.prepareStatement(SQL_SET_FILE_COPY_ON_IMAGE);
+            if (need.onImage()) {
                 pstmt.setInt(1, 1);
             } else {
                 pstmt.setInt(1, 0);
@@ -1132,6 +1151,10 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                 pstmt.setNull(15, Types.BLOB);
             }
 
+            pstmt.setString(16, resource.getClientToken());
+
+            pstmt.setDouble(17, resource.getChargeRatio());
+
             if (this.dbTrace) {
                 logger.trace("creating WorkspaceResource db " +
                         "entry for " + Lager.id(id));
@@ -1348,6 +1371,12 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                     resource.setInitialState(state, null);
                 }
 
+                final String clientToken = rs.getString(15);
+                resource.setClientToken(clientToken);
+
+                final double chargeRatio = rs.getDouble(16);
+                resource.setChargeRatio(chargeRatio);
+
                 if (this.dbTrace) {
                     logger.trace("found " + Lager.id(id) +
                              ": name = " + name +
@@ -1363,7 +1392,9 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                              ", groupsize = " + groupsize +
                              ", isLastInGroup = " + isLastInGroup +
                              ", launchIndex = " + launchIndex +
-                             ", errror present = " + (errBlob != null));
+                             ", clientToken = " + clientToken +
+                             ", chargeRatio = " + chargeRatio +
+                             ", error present = " + (errBlob != null));
                 }
                 
                 rs.close();
@@ -1430,7 +1461,7 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                         }
                     } else {
                         do {
-                            vm.addCustomizationNeed(
+                            vm.addFileCopyNeed(
                                     VirtualMachinePersistenceUtil.getNeed(rs));
                         } while (rs.next());
                     }
@@ -1469,6 +1500,76 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                 logger.error("SQLException in finally cleanup", sql);
             }
         }
+    }
+
+    public VirtualMachine loadVM(int id, Connection c) throws SQLException, DoesNotExistException, WorkspaceDatabaseException {
+
+        if (this.dbTrace) {
+            logger.trace(Lager.id(id) + ": load virtual machine");
+        }
+
+        PreparedStatement[] pstmts = VirtualMachinePersistenceUtil.getVMQuery(id, c);
+        ResultSet rs = pstmts[0].executeQuery();
+        if (rs == null || !rs.next()) {
+            logger.error("resource with id=" + id + " not found");
+            throw new DoesNotExistException();
+        }
+
+        final VirtualMachine vm =
+                VirtualMachinePersistenceUtil.newVM(id, rs);
+
+        if (this.dbTrace) {
+            logger.trace(Lager.id(id) +
+                    ", created vm:\n" + vm.toString());
+        }
+
+        rs.close();
+
+        rs = pstmts[1].executeQuery();
+        if (rs == null || !rs.next()) {
+            logger.debug("resource with id=" + id + " has no" +
+                    " deployment information");
+        } else {
+            VirtualMachinePersistenceUtil.addDeployment(vm, rs);
+            if (this.dbTrace) {
+                logger.trace("added deployment info to vm object");
+            }
+            rs.close();
+        }
+
+        rs = pstmts[2].executeQuery();
+
+        if (rs == null || !rs.next()) {
+            logger.warn("resource with id=" + id + " has no" +
+                    " partitions");
+        } else {
+            final ArrayList partitions = new ArrayList(8);
+            do {
+                partitions.add(VirtualMachinePersistenceUtil.
+                        getPartition(rs));
+            } while (rs.next());
+
+            final VirtualMachinePartition[] parts =
+                    (VirtualMachinePartition[]) partitions.toArray(
+                            new VirtualMachinePartition[partitions.size()]);
+            vm.setPartitions(parts);
+        }
+
+        rs = pstmts[3].executeQuery();
+
+        if (rs == null || !rs.next()) {
+            if (this.lager.dbLog) {
+                logger.debug("resource with id=" + id + " has no" +
+                        " customization needs");
+            }
+        } else {
+            do {
+                vm.addFileCopyNeed(
+                        VirtualMachinePersistenceUtil.getNeed(rs));
+            } while (rs.next());
+        }
+
+        return vm;
     }
 
     public void loadGroup(String id, GroupResource resource)
@@ -1797,7 +1898,9 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
 
     }
 
-    public void updateResourcepoolEntryAvailableMemory(String hostname, int newAvailMemory)
+    public void updateResourcepoolEntryAvailableMemory(String hostname,
+                                                       int newAvailMemory,
+                                                       int preemptibleMemory)
             throws WorkspaceDatabaseException {
 
         if (this.dbTrace) {
@@ -1812,6 +1915,10 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
             throw new IllegalArgumentException("newAvailMemory must be non-negative");
         }
 
+        if (preemptibleMemory < 0) {
+            throw new IllegalArgumentException("preemptibleMemory must be non-negative");
+        }
+
         Connection c = null;
         PreparedStatement pstmt = null;
         try {
@@ -1821,7 +1928,8 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                     c.prepareStatement(SQL_UPDATE_RESOURCE_POOL_ENTRY_MEMORY);
 
             pstmt.setInt(1, newAvailMemory);
-            pstmt.setString(2, hostname);
+            pstmt.setInt(2, preemptibleMemory);
+            pstmt.setString(3, hostname);
 
             final int updated = pstmt.executeUpdate();
             if (updated != 1) {
@@ -1968,7 +2076,6 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
             while (rs.next()) {
                 int memory = rs.getInt(1);
                 total += memory;
-
                 if (this.dbTrace) {
                     logger.trace("memoryUsedOnPoolnode(): found " + memory +
                             " MB for one VM, new total is " + total);
@@ -2023,6 +2130,7 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                         rs.getString(2),
                         rs.getInt(4),
                         rs.getInt(5),
+                        rs.getInt(7),
                         rs.getString(3),
                         rs.getBoolean(6));
                 list.add(entry);
@@ -2072,6 +2180,7 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                     rs.getString(2),
                     rs.getInt(4),
                     rs.getInt(5),
+                    rs.getInt(7),
                     rs.getString(3),
                     rs.getBoolean(6));
 
@@ -2110,6 +2219,7 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
         PreparedStatement pstmt = null;
         try {
             c = getConnection();
+
             pstmt = c.prepareStatement(SQL_INSERT_RESOURCE_POOL_ENTRY);
 
             pstmt.setString(1, entry.getResourcePool());
@@ -2378,6 +2488,50 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
             }
         }
     }
+
+    public boolean isInfeasibleRequest(int requestedMem)
+            throws WorkspaceDatabaseException{
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+
+        try {
+            c = getConnection();
+            pstmt = c.prepareStatement(SQL_SELECT_INFEASIBLE_MEMORY);
+            pstmt.setInt(1, requestedMem);
+            rs = pstmt.executeQuery();
+
+            if (rs == null || !rs.next()) {
+                throw new WorkspaceDatabaseException("Should always have a result");
+            } else {
+                int numPossibleVmms = rs.getInt(1);
+                if (numPossibleVmms > 0) {
+                    return false;
+                } else {
+                    return true;
+                }
+            }
+
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (rs != null) {
+                    rs.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
     
     public List<ResourcepoolEntry> getAvailableEntriesSortedByFreeMemoryPercentage(int requestedMem)
             throws WorkspaceDatabaseException{
@@ -2419,6 +2573,7 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                             hostname,
                             rs.getInt(4),
                             rs.getInt(5),
+                            rs.getInt(7),
                             assocs,
                             rs.getBoolean(6));
                 entries.add(entry);
@@ -2445,6 +2600,787 @@ public class PersistenceAdapterImpl implements WorkspaceConstants,
                 logger.error("SQLException in finally cleanup", sql);
             }
         }                
-    }    
+    }
 
+
+    private synchronized Integer getTotalMemory(String sql) throws WorkspaceDatabaseException {
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            c = getConnection();
+
+            pstmt = c.prepareStatement(sql);
+            rs = pstmt.executeQuery();
+            
+            if (rs == null) {
+                if (this.dbTrace) {
+                    logger.trace("getTotalMemory(): null result so " +
+                                 "total is 0 MB");
+                }
+                return 0;
+            }
+
+            Integer total = 0;
+
+            if(rs.next()){
+                total = rs.getInt(1);
+            } 
+            
+            return total;
+            
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (rs != null) {
+                    rs.close();
+                }
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException e) {
+                logger.error("SQLException in finally cleanup", e);
+            }
+        }
+    }
+
+
+    public Integer getTotalAvailableMemory(Integer multipleOf) throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getTotalAvailableMemory(" + multipleOf + ")");
+        }
+                
+        Integer total = 0;
+        
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            c = getConnection();
+
+            pstmt = c.prepareStatement(SQL_SELECT_MULTIPLE_OF_AVAILABLE_MEMORY);
+            pstmt.setInt(1, multipleOf);
+            rs = pstmt.executeQuery();
+            
+            if (rs == null) {
+                if (this.dbTrace) {
+                    logger.trace("getTotalMemory(): null result so " +
+                                 "total is 0 MB");
+                }
+                return 0;
+            }
+
+            if(rs.next()){
+                total = rs.getInt(1);
+            } 
+                        
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (rs != null) {
+                    rs.close();
+                }
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException e) {
+                logger.error("SQLException in finally cleanup", e);
+            }
+        }        
+        
+        if (this.dbTrace) {
+            logger.trace("getTotalAvailableMemory(" + multipleOf + "): total available memory = " + total);
+        }
+
+        return total;
+    }
+
+    public Integer getTotalAvailableMemory() throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getTotalAvailableMemory()");
+        }
+        
+        Integer total = getTotalMemory(SQL_SELECT_TOTAL_AVAILABLE_MEMORY);
+        
+        if (this.dbTrace) {
+            logger.trace("getTotalAvailableMemory(): total max memory = " + total);
+        }
+
+        return total;
+    }
+    
+    public Integer getTotalMaxMemory() throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getTotalMaxMemory()");
+        }
+        
+        Integer total = getTotalMemory(SQL_SELECT_TOTAL_MAX_MEMORY);
+        
+        if (this.dbTrace) {
+            logger.trace("getTotalMaxMemory(): total max memory = " + total);
+        }
+
+        return total;
+    }
+
+
+    public Integer getTotalPreemptableMemory() throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getTotalPreemptableMemory()");
+        }
+        
+        Integer total = getTotalMemory(SQL_SELECT_TOTAL_PREEMPTABLE_MEMORY);
+        
+        if (this.dbTrace) {
+            logger.trace("getTotalPreemptableMemory(): total pre-emptable memory = " + total);
+        }
+
+        return total;
+    }
+    
+    public Integer getUsedNonPreemptableMemory() throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getUsedNonPreemptableMemory()");
+        }
+        
+        Integer total = getTotalMemory(SQL_SELECT_USED_NON_PREEMPTABLE_MEMORY);
+        
+        if (this.dbTrace) {
+            logger.trace("getUsedNonPreemptableMemory(): used non pre-emptable memory = " + total);
+        }
+
+        return total;
+    }
+
+    public void addSpotPriceHistory(Calendar timeStamp, Double newPrice) throws WorkspaceDatabaseException{
+        if (this.dbTrace) {
+            logger.trace("addSpotPriceHistory(): timeStamp = " + timeStamp + ", spot price = " + newPrice);
+        }
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        try {
+            c = getConnection();
+            pstmt = c.prepareStatement(SQL_INSERT_SPOT_PRICE);
+
+            if (timeStamp != null) {
+                pstmt.setLong(1,
+                    new Long(timeStamp.getTimeInMillis()));
+            } else {
+                pstmt.setInt(1, 0);
+            }
+
+            pstmt.setDouble(2, newPrice);
+            final int updated = pstmt.executeUpdate();
+
+            if (this.dbTrace) {
+                logger.trace("addSpotPriceHistory(): updated " + updated + " rows");
+            }
+
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+
+    public List<SpotPriceEntry> getSpotPriceHistory(Calendar startDate,
+            Calendar endDate) throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getSpotPriceHistory() startDate: " + startDate == null? null : startDate.getTime() 
+                            + ". endDate: " + endDate == null? null : endDate.getTime());
+        }
+
+        Connection c = null;
+        Statement st = null;
+        ResultSet rs = null;
+
+        try {
+            c = getConnection();
+            st = c.createStatement();
+            
+            String statement = SQL_SELECT_SPOT_PRICE;
+            
+            if(startDate != null || endDate != null){
+                statement += " WHERE ";
+                
+                if(startDate != null){
+                    statement += "tstamp >= " + startDate.getTimeInMillis(); 
+                    if(endDate != null){
+                        statement += " AND";
+                    }
+                }
+                
+                if(endDate != null){
+                    statement += " tstamp <= " + endDate.getTimeInMillis();
+                }
+            }
+            
+            rs = st.executeQuery(statement);
+            
+            if (rs == null || !rs.next()) {
+                if (lager.traceLog) {
+                    logger.debug("no previous spot price history");
+                }
+                return new LinkedList<SpotPriceEntry>();
+            }
+
+            List<SpotPriceEntry> result = new LinkedList<SpotPriceEntry>();
+            do {
+                // rs was next'd above already
+                Long timeMillis = rs.getLong(1);                
+                Double spotPrice = rs.getDouble(2);
+                _SpotPriceEntry spotPriceEntry = repr._newSpotPriceEntry();
+                
+                Calendar timeStamp = Calendar.getInstance();
+                timeStamp.setTimeInMillis(timeMillis);
+
+                spotPriceEntry.setTimeStamp(timeStamp);
+                spotPriceEntry.setSpotPrice(spotPrice);
+                
+                result.add(spotPriceEntry);
+                
+                if (this.dbTrace) {
+                    logger.trace("found spot price entry: '" +
+                            timeStamp + " : " + spotPrice + "'");
+                }
+            } while (rs.next());
+
+            return result;
+            
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (st != null) {
+                    st.close();
+                }
+                if (rs != null) {
+                    rs.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+    
+    public Double getLastSpotPrice() throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getLastSpotPrice()");
+        }
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+
+        try {
+            c = getConnection();
+            pstmt = c.prepareStatement(SQL_SELECT_LAST_SPOT_PRICE);
+            
+            rs = pstmt.executeQuery();
+            
+            if (rs == null || !rs.next()) {
+                if (lager.traceLog) {
+                    logger.debug("no previous spot price");
+                }
+                return null;
+            }
+
+            double result = rs.getDouble(1);
+            
+            if(rs.next()){
+                logger.warn("Wrong behavior: multiple spot prices from last time stamp.");
+            }
+            
+            return result;
+            
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (rs != null) {
+                    rs.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+    public Backfill getStoredBackfill() throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("getStoredBackfill()");
+        }
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+
+        try {
+            c = getConnection();
+            pstmt = c.prepareStatement(SQL_SELECT_BACKFILL);
+
+            rs = pstmt.executeQuery();
+
+            if (rs == null || !rs.next()) {
+                if (lager.traceLog) {
+                    logger.debug("no previous backfill");
+                }
+                return null;
+            }
+
+            Backfill bf = new Backfill(null, null, null, null);
+            bf.setBackfillEnabled(rs.getBoolean(1));
+            bf.setMaxInstances(rs.getInt(2));
+            bf.setDiskImage(rs.getString(3));
+            bf.setSiteCapacity(rs.getInt(4));
+            bf.setRepoUser(rs.getString(5));
+            return bf;
+
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (rs != null) {
+                    rs.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+    public synchronized void setBackfill(Backfill bf) throws WorkspaceDatabaseException {
+        if (bf == null) {
+            throw new IllegalArgumentException("backfill may not be null");
+        }
+
+        if (this.dbTrace) {
+            logger.trace("setBackfill()");
+        }
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        try {
+            c = getConnection();
+
+            // Need to determine whether to use insert or update
+            Backfill previous = this.getStoredBackfill();
+            if (previous == null) {
+                pstmt = c.prepareStatement(SQL_INSERT_BACKFILL);
+            } else {
+                pstmt = c.prepareStatement(SQL_UPDATE_BACKFILL);
+            }
+
+            pstmt.setInt(1, bf.isBackfillEnabled() ? 1 : 0);
+            pstmt.setInt(2, bf.getMaxInstances());
+            pstmt.setString(3, bf.getDiskImage());
+            pstmt.setInt(4, bf.getSiteCapacity());
+            pstmt.setString(5, bf.getRepoUser());
+            pstmt.setInt(6, bf.getInstanceMem());
+
+            final int updated = pstmt.executeUpdate();
+            if (this.dbTrace) {
+                logger.trace("Updated/inserted backfill");
+            }
+
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+    /**
+     * Retrieves idempotency reservation
+     *
+     * @param creatorId   initiating client user
+     * @param clientToken client-provided idempotency token
+     * @return stored reservation, or null of not found
+     * @throws WorkspaceDatabaseException
+     *          DB error
+     */
+    public IdempotentReservation getIdempotentReservation(String creatorId, String clientToken)
+            throws WorkspaceDatabaseException {
+
+        if (creatorId == null) {
+            throw new IllegalArgumentException("creatorId may not be null");
+        }
+        if (clientToken == null) {
+            throw new IllegalArgumentException("clientToken may not be null");
+        }
+
+        if (this.dbTrace) {
+            logger.trace("getIdempotentReservation()");
+        }
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            c = getConnection();
+
+            pstmt = c.prepareStatement(SQL_SELECT_IDEMPOTENT_CREATION);
+
+            pstmt.setString(1, creatorId);
+            pstmt.setString(2, clientToken);
+
+            rs = pstmt.executeQuery();
+
+            if (rs == null || !rs.next()) {
+                if (lager.traceLog) {
+                    logger.debug("no existing idempotency reservation");
+                }
+                return null;
+            }
+
+            ArrayList<IdempotentInstance> instances = new ArrayList<IdempotentInstance>();
+            // rs was next'd above already
+            final String groupId = rs.getString(2);
+            do {
+                final int vmId = rs.getInt(1);
+                final String name = rs.getString(3);
+                final int launchIndex = rs.getInt(4);
+
+                instances.add(new IdempotentInstanceImpl(vmId, name, launchIndex));
+            } while(rs.next());
+
+            return new IdempotentReservationImpl(creatorId, clientToken, groupId, instances);
+
+
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+
+                if (rs != null) {
+                    rs.close();
+                }
+
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+    /**
+     * Stores idempotency reservation
+     *
+     * @param reservation the reservation to store
+     * @throws WorkspaceDatabaseException
+     *          DB error
+     */
+    public void addIdempotentReservation(IdempotentReservation reservation)
+            throws WorkspaceDatabaseException {
+        if (this.dbTrace) {
+            logger.trace("addIdempotentReservation()");
+        }
+
+        Connection c = null;
+        PreparedStatement[] pstmts = null;
+        try {
+            c = getConnection();
+            c.setAutoCommit(false);
+
+            pstmts = IdempotencyPersistenceUtil.getInsertReservation(reservation, c);
+
+            for (PreparedStatement pstmt : pstmts) {
+                pstmt.executeUpdate();
+            }
+            c.commit();
+
+            if (this.dbTrace) {
+                logger.trace("Inserted idempotency reservation");
+            }
+
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmts != null) {
+                    for (PreparedStatement pstmt : pstmts) {
+                        pstmt.close();
+                    }
+                }
+                if (c != null) {
+                    c.setAutoCommit(true);
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+    /**
+     * Removes existing idempotency reservation
+     *
+     * @param creatorId   initiating client user
+     * @param clientToken client-provided idempotency token
+     * @throws WorkspaceDatabaseException
+     *          DB error
+     */
+    public void removeIdempotentReservation(String creatorId, String clientToken)
+            throws WorkspaceDatabaseException {
+
+        if (creatorId == null) {
+            throw new IllegalArgumentException("creatorId may not be null");
+        }
+        if (clientToken == null) {
+            throw new IllegalArgumentException("clientToken may not be null");
+        }
+
+        if (this.dbTrace) {
+            logger.trace("removeIdempotentReservation()");
+        }
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        try {
+            c = getConnection();
+            pstmt = c.prepareStatement(SQL_DELETE_IDEMPOTENT_CREATION);
+            pstmt.setString(1, creatorId);
+            pstmt.setString(2, clientToken);
+
+            pstmt.executeUpdate();
+
+        } catch(SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+    public void addAsyncRequest(AsyncRequest asyncRequest)
+                                throws WorkspaceDatabaseException {
+
+        if (asyncRequest == null) {
+            throw new IllegalArgumentException("asyncRequest may not be null");
+        }
+
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        PreparedStatement[] pstmts = null;
+        try {
+            c = getConnection();
+
+            AsyncRequest oldAsyncRequest = getAsyncRequest(asyncRequest.getId());
+
+
+            if (oldAsyncRequest != null) {
+                logger.debug("Updating old request " + oldAsyncRequest.getId());
+                // We will later need to persist modified versions of our persisted VMs,
+                // so we need to remove all of our earlier copies
+                pstmts = AsyncRequestMapPersistenceUtil.getRemoveAsyncBindings(oldAsyncRequest, c);
+                for (PreparedStatement p : pstmts) {
+
+                    p.executeUpdate();
+                }
+                AsyncRequestMapPersistenceUtil.removeAllocatedVMs(oldAsyncRequest, c);
+                AsyncRequestMapPersistenceUtil.removeFinishedVMs(oldAsyncRequest, c);
+                AsyncRequestMapPersistenceUtil.removeToBePreempted(oldAsyncRequest, c);
+
+
+                pstmt = AsyncRequestMapPersistenceUtil.getUpdateAsyncRequest(asyncRequest, this.repr, c);
+                pstmt.executeUpdate();
+                c.commit();
+            }
+            else {
+                logger.debug("Persisting request: " + asyncRequest.getId());
+                pstmt = AsyncRequestMapPersistenceUtil.getInsertAsyncRequest(asyncRequest, this.repr, c);
+                pstmt.executeUpdate();
+            }
+
+            AsyncRequestMapPersistenceUtil.putAllocatedVMs(asyncRequest, c);
+            AsyncRequestMapPersistenceUtil.putFinishedVMs(asyncRequest, c);
+            AsyncRequestMapPersistenceUtil.putToBePreempted(asyncRequest, c);
+            AsyncRequestMapPersistenceUtil.putAsyncRequestBindings(asyncRequest, c);
+            c.commit();
+
+        } catch (SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } catch (ManageException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (pstmts != null) {
+                    for (PreparedStatement p : pstmts) {
+                        p.close();
+                    }
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+    }
+
+    public AsyncRequest getAsyncRequest(String id)
+                                throws WorkspaceDatabaseException {
+
+        if (id == null) {
+            throw new IllegalArgumentException("id may not be null");
+        }
+
+        AsyncRequest asyncRequest = null;
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            c = getConnection();
+            pstmt = AsyncRequestMapPersistenceUtil.getAsyncRequest(id, c);
+            rs = pstmt.executeQuery();
+
+            if (rs == null || !rs.next()) {
+                logger.debug("No Asyncrequest with ID " + id);
+                return null;
+            }
+
+            asyncRequest = AsyncRequestMapPersistenceUtil.rsToAsyncRequest(rs, this.repr, c);
+            VirtualMachine[] bindings = AsyncRequestMapPersistenceUtil.getAsyncVMs(asyncRequest.getId(), c);
+            asyncRequest.setBindings(bindings);
+            AsyncRequestMapPersistenceUtil.addAllocatedVMs(asyncRequest, c);
+            AsyncRequestMapPersistenceUtil.addFinishedVMs(asyncRequest, c);
+            AsyncRequestMapPersistenceUtil.addToBePreempted(asyncRequest, c);
+
+        } catch (SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } catch (CannotTranslateException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+
+        return asyncRequest;
+    }
+
+
+    public ArrayList<AsyncRequest> getAllAsyncRequests()
+            throws WorkspaceDatabaseException {
+
+        ArrayList<AsyncRequest> asyncRequests = new ArrayList<AsyncRequest>();
+
+        Connection c = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            c = getConnection();
+            pstmt = AsyncRequestMapPersistenceUtil.getAllAsyncRequests(c);
+            rs = pstmt.executeQuery();
+
+            if (rs == null || !rs.next()) {
+                return asyncRequests;
+            }
+
+            do {
+                String id = rs.getString("id");
+                AsyncRequest asyncRequest = this.getAsyncRequest(id);
+                asyncRequests.add(asyncRequest);
+            } while(rs.next());
+        } catch (SQLException e) {
+            logger.error("",e);
+            throw new WorkspaceDatabaseException(e);
+        } finally {
+            try {
+                if (pstmt != null) {
+                    pstmt.close();
+                }
+                if (c != null) {
+                    returnConnection(c);
+                }
+            } catch (SQLException sql) {
+                logger.error("SQLException in finally cleanup", sql);
+            }
+        }
+
+        return asyncRequests;
+    }
 }

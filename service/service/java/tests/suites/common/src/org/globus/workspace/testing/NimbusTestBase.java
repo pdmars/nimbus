@@ -20,9 +20,19 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.rmi.RemoteException;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import com.google.gson.Gson;
 import org.apache.commons.dbcp.BasicDataSource;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
@@ -31,9 +41,12 @@ import org.apache.log4j.PropertyConfigurator;
 import org.globus.workspace.ReturnException;
 import org.globus.workspace.WorkspaceException;
 import org.globus.workspace.WorkspaceUtil;
+import org.globus.workspace.remoting.admin.VmmNode;
 import org.globus.workspace.testing.utils.ReprPopulator;
 import org.nimbustools.api.brain.ModuleLocator;
 import org.nimbustools.api.brain.NimbusHomePathResolver;
+import org.nimbustools.api.services.admin.RemoteNodeManagement;
+import org.nimbustools.api.services.rm.Manager;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.testng.AbstractTestNGSpringContextTests;
 import org.testng.annotations.AfterMethod;
@@ -52,10 +65,12 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
     // STATIC VARIABLES
     // -----------------------------------------------------------------------------------------
 
-    private static final String MODULE_LOCATOR_BEAN_NAME = "nimbus-brain.ModuleLocator";
+    protected static final String MODULE_LOCATOR_BEAN_NAME = "nimbus-brain.ModuleLocator";
     private static final String DATA_SOURCE_BEAN_NAME = "other.MainDataSource";
+    private static final String WORKSPACE_HOME_BEAN_NAME = "nimbus-rm.home.instance";
     private static final String TIMER_MANAGER_BEAN_NAME = "other.timerManager";
-    
+    private static final String REMOTING_NATIVE_PROPERTY = "org.newsclub.net.unix.library.path";
+
     public static final String FORCE_SUITES_DIR_PATH = "nimbus.servicetestsuites.abspath";
     public static final String NO_TEARDOWN = "nimbus.servicetestsuites.noteardown";
     private static final String LOG_SEP =
@@ -73,6 +88,8 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
     // 'logger' should be used only after suite setup, this class prevents NPEs beforehand
     protected Log logger = new FakeLog();
 
+    protected final ExecutorService suiteExecutor = Executors.newCachedThreadPool();
+
 
     // -----------------------------------------------------------------------------------------
     // ABSTRACT METHODS
@@ -89,25 +106,25 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
     // @Overrides AbstractTestNGSpringContextTests
     // -----------------------------------------------------------------------------------------
     
-    @Override
     @BeforeClass(alwaysRun=true)
     protected void springTestContextPrepareTestInstance() throws Exception {
         this.suiteSetup();
-        
         super.springTestContextPrepareTestInstance();
     }
     
-    @Override
     @BeforeMethod(alwaysRun=true)
     protected void springTestContextBeforeTestMethod(Method testMethod)
-            throws Exception {      
+            throws Exception {
         super.springTestContextBeforeTestMethod(testMethod);
         
         //Looked up before each test method in case @DirtiesContext was used in previous method
         this.locator = (ModuleLocator) applicationContext.getBean(MODULE_LOCATOR_BEAN_NAME);
+        this.setUpVmms();
+
+        // This triggers any "post context setup" initialization work
+        this.locator.getManager().recover_initialize();
     }
-    
-    @Override
+
     @AfterMethod(alwaysRun=true)
     protected void springTestContextAfterTestMethod(Method testMethod)
             throws Exception {
@@ -115,20 +132,21 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
         if(testMethod.isAnnotationPresent(DirtiesContext.class)){
             logger.debug(LOG_SEP + "\n*** @DirtiesContext FOUND - STARTING CLEANUP: " + LOG_SEP);       
             stopTimerManager();
-            shutdownDB();
-            resetDB();
+            stopWorkspaceService();
+            //shutdownDB();
+            quickResetDB();
             logger.debug(LOG_SEP + "\n*** @DirtiesContext FOUND - FINISHED CLEANUP: " + LOG_SEP);
         } 
         
         super.springTestContextAfterTestMethod(testMethod);  
-    }    
-    
+    }
+
     // -----------------------------------------------------------------------------------------
     // TEST SETUP / TEARDOWN
     // -----------------------------------------------------------------------------------------
 
     /**
-     * Set up logger and var directory for this test suite.
+     * Set up logger, lib-native, and var directory for this test suite.
      *
      * Configures NIMBUS_HOME via system property.
      *
@@ -144,25 +162,47 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
 
         final String nimbusHome = this.getNimbusHome();
         logger.info("NIMBUS_HOME: " + nimbusHome);
-        
+
         System.setProperty(NimbusHomePathResolver.NIMBUS_HOME_ENV_NAME,
                            nimbusHome);
 
-        final File vardir = new File(nimbusHome, "services/var");
-        if (vardir.exists()) {
-            // teardown was not invoked or developer is trying something 'tricky'
-            logger.error("Generated directory exists, cowardly refusing to remove it; " +
-                        "leaving it alone: " + vardir.getAbsolutePath());
-        } else {
-            this.setUpShareDir(nimbusHome);
-            final File setupExe =
-                    new File(nimbusHome,
-                             "services/share/nimbus/full-reset.sh"); // requires ant on PATH
-            this.setUpVarDir(vardir, setupExe);
-        }
+        // Manually intervene here if you want to start off a test suite with your own var
+        // directory instead of a fresh one.
+        this.fullWipeResetDbAndVar();
+
+        String libNativePath = nimbusHome + "/services/lib-native";
+        System.setProperty(REMOTING_NATIVE_PROPERTY, libNativePath);
 
         logger.debug(LOG_SEP + "\n*** SUITE SETUP DONE (tests will begin): " +
                         this.getClass().getSimpleName() + LOG_SEP);
+    }
+
+    protected void setUpVmms() throws RemoteException {
+
+        logger.info("Before test method: setUpVmms()");
+
+        boolean active = true;
+        String nodePool = "default";
+        int nodeMemory = 2048;
+        String net = "*";
+        boolean vacant = true;
+
+        Gson gson = new Gson();
+        List<VmmNode> nodes = new ArrayList<VmmNode>(4);
+        nodes.add(new VmmNode("fakehost1", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost2", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost3", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost4", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost5", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost6", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost7", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost8", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost9", active, nodePool, nodeMemory, net, vacant));
+        nodes.add(new VmmNode("fakehost10", active, nodePool, nodeMemory, net, vacant));
+
+        final String nodesJson = gson.toJson(nodes);
+        RemoteNodeManagement rnm = this.locator.getNodeManagement();
+        rnm.addNodes(nodesJson);
     }
 
     /**
@@ -186,6 +226,7 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
         logger.debug(LOG_SEP + "\n*** TESTS DONE (beginning teardown): " +
                         this.getClass().getSimpleName() + LOG_SEP);
 
+        this.suiteExecutor.shutdownNow();
 
         final String nh = System.getProperty(NimbusHomePathResolver.NIMBUS_HOME_ENV_NAME);
         if (nh == null) {
@@ -194,11 +235,19 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
         final File vardir = new File(nh, "services/var");
         if (!vardir.exists()) {
             throw new Exception("Could not tear down, var dir " +
-                    "does not exist: " + vardir.getAbsolutePath());
+                    "does not exist? " + vardir.getAbsolutePath());
         }
-
         FileUtils.deleteDirectory(vardir);
         logger.info("Deleted test suite var dir '" + vardir.getAbsolutePath() + '\'');
+
+        final File vardir2 = new File(nh, "var/run/privileged");
+        if (!vardir2.exists()) {
+            throw new Exception("Could not tear down, privileged var/run dir " +
+                    "does not exist? " + vardir2.getAbsolutePath());
+        }
+        FileUtils.deleteDirectory(vardir2);
+        logger.info("Deleted privileged var/run dir '" + vardir2.getAbsolutePath() + '\'');
+
         logger.debug(LOG_SEP + "\n*** TEARDOWN DONE: " +
                         this.getClass().getSimpleName() + LOG_SEP);
     }
@@ -417,19 +466,19 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
         String libdir = null;
         String apath = nh.getAbsolutePath();
         while (apath != null) {
-            final File candidate = candidate(apath, "lib/services/");
+            final File candidate = candidate(apath, "lib/workspaceservice/");
             if (candidate != null) {
                 libdir = candidate.getAbsolutePath();
             }
             apath = new File(apath).getParent();
         }
         if (libdir == null) {
-            throw new Exception("could not determine proper lib/services directory, " +
+            throw new Exception("could not determine proper lib/workspaceservice directory, " +
                     "is your nimbus home somewhere outside of the repository");
         }
         final File sanityCheck = new File(libdir, "derby.jar");
         if (!sanityCheck.exists()) {
-            throw new Exception("could not determine proper lib/services directory, " +
+            throw new Exception("could not determine proper lib/workspaceservice directory, " +
                "is your nimbus home somewhere outside of the repository (derby.jar not found)");
         }
         conf.setProperty("derby.classpath.dir.prop", libdir);
@@ -450,15 +499,83 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
     private void stopTimerManager() {
         logger.info("Stopping Timer Manager..");
         TimerManager timerManager = (TimerManager) applicationContext.getBean(TIMER_MANAGER_BEAN_NAME);
-        timerManager.stop();
-        logger.info("Timer Manager succesfully stopped");        
+        if (timerManager != null) {
+            timerManager.stop();
+            logger.info("Timer Manager succesfully stopped");
+        } else {
+            logger.info("No Timer Manager");
+        }
     }
 
-    private void resetDB() throws Exception, WorkspaceException,
+    private void stopWorkspaceService() {
+        logger.info("Stopping Workspace Manager (thread pools)..");
+        final Manager rm = this.locator.getManager();
+        if (rm != null) {
+            rm.shutdownImmediately();
+            logger.info("Workspace Manager (thread pools) stopped");
+        } else {
+            logger.info("No Workspace Manager");
+        }
+    }
+
+    private void fullWipeResetDbAndVar() throws Exception, WorkspaceException,
             ReturnException {
-        final File exe = new File(getNimbusHome(), "services/share/nimbus/servicedb-reset.sh"); // requires ant on PATH
-        final String[] cmd = {exe.getAbsolutePath()};
-        WorkspaceUtil.runCommand(cmd, true, true);
+
+        final String nimbusHome = this.getNimbusHome();
+        if (nimbusHome == null || nimbusHome.trim().length() == 0) {
+            throw new Exception("No Nimbus home");
+        }
+        if (!new File(nimbusHome).exists()) {
+            throw new Exception("Nimbus home does not exist: " + nimbusHome);
+        }
+
+        final File vardir = new File(nimbusHome, "services/var");
+        if (vardir.exists()) {
+            FileUtils.deleteDirectory(vardir);
+            logger.info("Deleted pre-existing test suite services/var dir '" + vardir.getAbsolutePath() + '\'');
+        }
+
+        final File vardir2 = new File(nimbusHome, "var/run/privileged");
+        if (vardir2.exists()) {
+            FileUtils.deleteDirectory(vardir2);
+            logger.info("Deleted pre-existing privileged var dir '" + vardir2.getAbsolutePath() + '\'');
+        }
+        boolean created = vardir2.mkdirs();
+        if (created) {
+            logger.info("Created new privileged var dir '" + vardir2.getAbsolutePath() + '\'');
+        } else {
+            throw new Exception("Could not create new privileged var dir: " + vardir2.getAbsolutePath());
+        }
+
+        this.setUpShareDir(nimbusHome);
+        final File setupExe =
+                new File(nimbusHome,
+                         "services/share/nimbus/full-reset.sh"); // requires ant on PATH
+        this.setUpVarDir(vardir, setupExe);
+    }
+
+    private void quickResetDB() throws Exception, WorkspaceException,
+            ReturnException {
+
+        final BasicDataSource ds =
+                (BasicDataSource) applicationContext.getBean(DATA_SOURCE_BEAN_NAME);
+        final Connection conn = ds.getConnection();
+        try {
+            conn.setAutoCommit(false);
+            final DatabaseMetaData dmd = conn.getMetaData();
+            final ResultSet trs = dmd.getTables(null, "NIMBUS", null, null);
+            while (trs.next()) {
+                final String tableName = trs.getString("TABLE_NAME");
+                logger.debug("Deleting all rows from " + tableName);
+                final Statement stmt = conn.createStatement();
+                stmt.executeUpdate("DELETE FROM " + tableName);
+            }
+        } finally {
+            if (conn != null) {
+                conn.setAutoCommit(true);
+                conn.close();
+            }
+        }
     }
 
     private void shutdownDB() throws Exception {
@@ -469,9 +586,14 @@ public abstract class NimbusTestBase extends AbstractTestNGSpringContextTests {
         for (int i = 0; i < 1000; i++) {
             try{
                 ds.getConnection();
+                Thread.sleep(10);
             } catch (SQLException e){
-                logger.info("DB succesfully shutdown.");
-                return;
+                if (e.getSQLState().equals("08006") || e.getSQLState().equals("XJ004")) {
+                    logger.info("DB succesfully shutdown. ('" + e.getSQLState() + "')");
+                    return;
+                } else {
+                    logger.info("DB not shutdown yet ('" + e.getSQLState() + "')");
+                }
             }
         }
 

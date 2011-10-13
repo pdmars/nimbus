@@ -1,13 +1,14 @@
 m4_include(/mcs/m4/worksp.lib.m4)
-_NIMBUS_HEADER(2.6 Upgrade Guide)
+_NIMBUS_HEADER(2.8 Upgrade Guide)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_LEFT2_COLUMN
 _NIMBUS_LEFT2_ADMIN_SIDEBAR(n,n,n,n,y)
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_2_6_DEPRECATED
+_NIMBUS_IS_DEPRECATED
 
-<h2>Upgrading from Nimbus 2.5 to 2.6</h2>
+
+<h2>Upgrading from Nimbus 2.5 to 2.8</h2>
 
 <p>
 	As of 2.6, Nimbus includes the <tt class="literal">./scripts/install-from</tt> program which aids in the migration from a previous Nimbus installation. 
@@ -37,7 +38,7 @@ _NIMBUS_2_6_DEPRECATED
 </p>
 
 <p>
-    The script will install Nimbus 2.6RC2 as normal but take into account configurations that were made in your previous installation.
+    The script will install Nimbus 2.6 as normal but take into account configurations that were made in your previous installation.
 </p>
 
 <p>
@@ -53,9 +54,13 @@ _NIMBUS_2_6_DEPRECATED
         <p>The <tt class="literal">install-from</tt> process will pick up most of the configurations, but not every last customization.  This diff command will assist you in the final touch-ups with the move.</p>
     </li>
     <li>
-        <p>Importing the VMM nodes that were configured.  Nimbus 2.6RC2 introduces a new, more powerful way of configuring VMMs using a tool called <tt class="literal">nimbus-nodes</tt>.  This requires the service to be running, though, so it cannot be used during the <tt class="literal">install-from</tt> process.</p>
+        <p>Importing the VMM nodes that were configured.  Nimbus 2.6 introduces a new, more powerful way of configuring VMMs using a tool called <tt class="literal">nimbus-nodes</tt>.  This requires the service to be running, though, so it cannot be used during the <tt class="literal">install-from</tt> process.</p>
         
         <p>The exact command to use (once you've started the service) is printed at the end of the <tt class="literal">install-from</tt> process.</p>
+
+<div class="note">
+If you are migrating from any version greater than 2.5 the process for converting worker nodes requires the manual use of the program nimbus-nodes.  Fortunately this program is easy to script around.  An example python program for this can be found <a href="reload.py">here</a>
+</div>
         
         <p>Here is an <a href="upgrade-diff-2.5-2.6.txt">example</a> of what <i>should</i> be different.</p>
     </li>

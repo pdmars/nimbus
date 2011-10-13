@@ -19,10 +19,12 @@ package org.globus.workspace.scheduler.defaults;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.globus.workspace.Lager;
+import org.globus.workspace.StateChangeInterested;
 import org.globus.workspace.WorkspaceConstants;
 import org.globus.workspace.LockManager;
 import org.globus.workspace.persistence.DataConvert;
 import org.globus.workspace.persistence.WorkspaceDatabaseException;
+import org.globus.workspace.scheduler.StateChangeEvent;
 import org.globus.workspace.scheduler.Reservation;
 import org.globus.workspace.scheduler.Scheduler;
 import org.globus.workspace.scheduler.IdHostnameTuple;
@@ -57,16 +59,17 @@ public class DefaultSchedulerAdapter implements Scheduler {
     // -------------------------------------------------------------------------
 
     protected final DataSource dataSource;
-    protected final SlotManagement slotManager;
     protected final TimerManager timerManager;
     protected final GlobalPolicies globals;
     protected final DataConvert dataConvert;
     protected final Lager lager;
+    protected StateChangeInterested siManager;
 
     // lock per coscheduling ID (see usage to know why)
     protected final LockManager lockManager;
 
     
+    protected SlotManagement slotManager;  
     protected WorkspaceHome home; // see setHome
     protected boolean valid;
     
@@ -86,7 +89,6 @@ public class DefaultSchedulerAdapter implements Scheduler {
     // -------------------------------------------------------------------------
 
     public DefaultSchedulerAdapter(LockManager lockManager,
-                                   SlotManagement slotManager,
                                    DataSource dataSource,
                                    TimerManager timerManager,
                                    GlobalPolicies globalPolicies,
@@ -97,11 +99,6 @@ public class DefaultSchedulerAdapter implements Scheduler {
             throw new IllegalArgumentException("lockManager may not be null");
         }
         this.lockManager = lockManager;
-        
-        if (slotManager == null) {
-            throw new IllegalArgumentException("slotManager may not be null");
-        }
-        this.slotManager = slotManager;
 
         if (dataSource == null) {
             throw new IllegalArgumentException("dataSource may not be null");
@@ -141,6 +138,19 @@ public class DefaultSchedulerAdapter implements Scheduler {
         this.home = homeImpl;
     }
     
+    public void setSiManager(StateChangeInterested siManagerImpl) {
+        if (siManagerImpl == null) {
+            throw new IllegalArgumentException("siManagerImpl may not be null");
+        }
+        this.siManager = siManagerImpl;
+    }
+    
+    public void setSlotManager(SlotManagement slotManagement) {
+        if (slotManagement == null) {
+            throw new IllegalArgumentException("slotManagement may not be null");
+        }
+        this.slotManager = slotManagement;        
+    }
 
     // -------------------------------------------------------------------------
     // IoC INIT METHOD
@@ -214,12 +224,14 @@ public class DefaultSchedulerAdapter implements Scheduler {
     }
 
     public Reservation schedule(int memory,
+                                int cores,
                                 int duration,
                                 String[] neededAssociations,
                                 int numNodes,
                                 String groupid,
                                 String coschedid,
-                                String creatorDN)
+                                boolean preemptable,
+								String creatorDN)
 
             throws SchedulingException,
                    ResourceRequestDeniedException {
@@ -252,12 +264,12 @@ public class DefaultSchedulerAdapter implements Scheduler {
         this.creationPending.pending(ids);
 
         final NodeRequest req =
-                new NodeRequest(ids, memory, duration, assocs, groupid, creatorDN);
+                new NodeRequest(ids, memory, cores, duration, assocs, groupid, creatorDN);
 
         try {
 
             if (coschedid == null) {
-                return this.scheduleImpl(req);
+                return this.scheduleImpl(req, preemptable);
             } else {
                 this.scheduleCoschedImpl(req, coschedid);
                 return new Reservation(ids, null);
@@ -275,14 +287,14 @@ public class DefaultSchedulerAdapter implements Scheduler {
         }
     }
 
-    private Reservation scheduleImpl(NodeRequest req)
+    private Reservation scheduleImpl(NodeRequest req, boolean preemptable)
                 throws WorkspaceDatabaseException,
                        ResourceRequestDeniedException {
 
         final String invalidResponse = "Implementation problem: slot " +
                 "manager returned invalid response";
 
-        final Reservation res = this.slotManager.reserveSpace(req);
+        final Reservation res = this.slotManager.reserveSpace(req, preemptable);
 
         if (res == null) {
             throw new ResourceRequestDeniedException(
@@ -611,15 +623,14 @@ public class DefaultSchedulerAdapter implements Scheduler {
             logger.trace(msg);
         }
 
-        if (state == WorkspaceConstants.STATE_DESTROYING) {
-            
-            // could be from scheduler backout during create, remember pending
-            // just means "between the time the scheduler conjures the id
-            // numbers and the time when the service creates and finalizes
-            // the new resources"
-            this.creationPending.notpending(id);
-            
-            remove(id);
+        if (state == WorkspaceConstants.STATE_DESTROYING ||
+            state == WorkspaceConstants.STATE_DESTROY_FAILED) {
+            return; // not ready yet
+        }
+
+        if (state == WorkspaceConstants.STATE_DESTROY_SUCCEEDED) {
+            removeScheduling(id);
+            notifySiManager(id, state);
             return;
         }
 
@@ -751,6 +762,15 @@ public class DefaultSchedulerAdapter implements Scheduler {
         }
     }
 
+
+    private void notifySiManager(int id, int state) {
+        final StateChangeEvent simEvent = new StateChangeEvent(id,
+                                                               state,
+                                                               this.siManager);
+
+        this.timerManager.schedule(simEvent, 20);
+    }
+
     private InstanceResource fetchResource(int id, int state)
                     throws ManageException {
 
@@ -859,7 +879,7 @@ public class DefaultSchedulerAdapter implements Scheduler {
         }
 
         this.db.backOutTasks(vmid);
-        this.slotManager.releaseSpace(vmid);
+        this.slotManager.releaseSpace(vmid);  // *** SYNCHRONIZED ISSUE *** 
         this.db.deleteNodeRequest(vmid);
     }
 
@@ -874,5 +894,55 @@ public class DefaultSchedulerAdapter implements Scheduler {
     protected int[] findWorkspacesToShutdown()
                             throws WorkspaceDatabaseException {
         return this.db.findWorkspacesToShutdown();
+    }
+
+    public void stateNotification(int[] ids, int state) {
+        for (int i = 0; i < ids.length; i++) {
+            try {
+                this.stateNotification(ids[i], state);
+            } catch (ManageException e) {
+                logger.fatal(e);
+            }                
+        }
+    }
+
+    /**
+     * @param id vmid
+     * @throws ManageException
+     */
+    public void removeScheduling(int id) throws ManageException {
+        // could be from scheduler backout during create, remember pending
+        // just means "between the time the scheduler conjures the id
+        // numbers and the time when the service creates and finalizes
+        // the new resources"
+        this.creationPending.notpending(id);
+        
+        remove(id);
+    }
+
+    public void removeScheduling(Reservation reservation,
+                                 int memory,
+                                 int cores,
+                                 int duration,
+                                 boolean preemptible) throws ManageException {
+
+        for (int vmid : reservation.getIds()) {
+            if (lager.traceLog) {
+                logger.trace("remove(): reservation " + Lager.id(vmid));
+            }
+
+            this.db.backOutTasks(vmid);
+            this.db.deleteNodeRequest(vmid);
+        }
+
+        // leaving out some fields that don't matter
+        NodeRequest request = new NodeRequest(reservation.getIds(),
+                memory, cores, duration, null, null, null);
+
+        this.slotManager.releaseSpace(request, reservation, preemptible);
+    }
+
+    public synchronized String getVMMReport() {
+        return this.slotManager.getVMMReport();
     }
 }

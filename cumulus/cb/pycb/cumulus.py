@@ -46,6 +46,7 @@ def init_redirector(req, bucketName, objectName):
         raise ex
 
 def path_to_bucket_object(path):
+    path = urllib.unquote(path)
     if path == "/":
         return (path, None)
     # extract out the bucket name
@@ -59,8 +60,6 @@ def path_to_bucket_object(path):
         objectName = p_a[1].strip()
         if objectName == "":
             objectName = None
-        else:
-            objectName = urllib.unquote(objectName)
     return (bucketName, objectName)
 
 def createPath(headers, path):
@@ -173,7 +172,7 @@ class CBService(resource.Resource):
             self.allowed_event(request, user, requestId, rPath)
         except cbException, ex:
             eMsg = ex.sendErrorResponse(request, requestId)
-            pycb.log(logging.INFO, eMsg, traceback)
+            pycb.log(logging.ERROR, eMsg, traceback)
         except Exception, ex2:
             traceback.print_exc(file=sys.stdout)
             gdEx = cbException('InternalError')

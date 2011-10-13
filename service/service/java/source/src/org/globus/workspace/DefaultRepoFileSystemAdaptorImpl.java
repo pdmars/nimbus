@@ -20,8 +20,16 @@ public class DefaultRepoFileSystemAdaptorImpl implements RepoFileSystemAdaptor
          return publicName;
     }
 
+    public String getTranslatedChecksum(
+        String                          publicUrl)
+    {
+        return null;
+    }
+
     public void unpropagationFinished(
-        String                          publicName)
+        String                          publicName,
+        String                          creatorID,
+        VirtualMachine                  vm)
             throws WorkspaceException
     {
 

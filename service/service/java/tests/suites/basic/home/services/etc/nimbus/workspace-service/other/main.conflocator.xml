@@ -55,6 +55,24 @@
                   value="$REPO{" />
     </bean>
 
+    <bean id="cumulusSettings"
+          class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+
+        <property name="location"
+                  value="$NIMBUS_HOME/services/etc/nimbus/workspace-service/cumulus.conf" />
+        <property name="placeholderPrefix"
+                  value="$CUMULUS{" />
+    </bean>
+
+    <bean id="asyncSettings"
+          class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+
+        <property name="location"
+                  value="$NIMBUS_HOME/services/etc/nimbus/workspace-service/async.conf" />
+        <property name="placeholderPrefix"
+                  value="$ASYNC{" />
+    </bean>
+
     <bean id="accountingSettings"
           class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
 
@@ -100,13 +118,18 @@
                   value="$PILOT{" />
     </bean>
 
+    <bean id="metadataSettingsProperties"
+            class="org.springframework.beans.factory.config.PropertiesFactoryBean">
+        <property name="location"
+                  value="$NIMBUS_HOME/services/etc/nimbus/workspace-service/metadata.conf"/>
+    </bean>
+    
     <bean id="metadataSettings"
           class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
 
-        <property name="location"
-                  value="$NIMBUS_HOME/services/etc/nimbus/workspace-service/metadata.conf" />
         <property name="placeholderPrefix"
                   value="$METADATA{" />
+        <property name="properties" ref="metadataSettingsProperties"/>
     </bean>
 
     <bean id="derbySettings"
@@ -118,4 +141,25 @@
         
     </bean>
 
+    <bean id="adminSettings"
+          class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="location"
+                  value="$NIMBUS_HOME/services/etc/nimbus/workspace-service/admin.conf" />
+        <property name="placeholderPrefix"
+                  value="$ADMIN{" />
+    </bean>
+
+    <bean id="elasticSettings"
+          class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+
+        <property name="location" value="$NIMBUS_HOME/services/etc/nimbus/elastic/elastic.conf" />
+        <property name="placeholderPrefix" value="$ELASTIC{" />
+    </bean>
+
+    <bean id="otherElasticSettings"
+          class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+
+        <property name="location" value="$NIMBUS_HOME/services/etc/nimbus/elastic/other/other-elastic.conf" />
+        <property name="placeholderPrefix" value="$OTHER_ELASTIC{" />
+    </bean>
 </beans>

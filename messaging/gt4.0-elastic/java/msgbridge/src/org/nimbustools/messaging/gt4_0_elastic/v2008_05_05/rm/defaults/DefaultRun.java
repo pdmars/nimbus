@@ -35,7 +35,7 @@ import org.nimbustools.api.repr.vm.ResourceAllocation;
 import org.nimbustools.api.repr.vm.State;
 import org.nimbustools.api.repr.vm.VM;
 import org.nimbustools.api.repr.vm.VMFile;
-import org.nimbustools.messaging.gt4_0_elastic.generated.v2009_08_15.*;
+import org.nimbustools.messaging.gt4_0_elastic.generated.v2010_08_31.*;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.Networks;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.ResourceAllocations;
 import org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.Repository;
@@ -184,7 +184,8 @@ public class DefaultRun implements Run {
         final String raType = req.getInstanceType();
         final ResourceAllocation ra = this.RAs.getMatchingRA(raType,
                                                              req.getMinCount(),
-                                                             req.getMaxCount());
+                                                             req.getMaxCount(),
+                                                             false);
 
         final RequiredVMM reqVMM = this.RAs.getRequiredVMM();
 
@@ -205,6 +206,8 @@ public class DefaultRun implements Run {
         final VMFile[] files =
                 this.repository.constructFileRequest(imageID, ra, caller);
 
+        final String clientToken = req.getClientToken();
+
         final _CreateRequest creq = this.repr._newCreateRequest();
 
         creq.setContext(null);
@@ -223,6 +226,7 @@ public class DefaultRun implements Run {
         creq.setVMFiles(files);
         creq.setMdUserData(userData);
         creq.setSshKeyName(keyname);
+        creq.setClientToken(clientToken);
 
         return creq;
     }
@@ -255,13 +259,13 @@ public class DefaultRun implements Run {
 
         final String vmidWhenJustOne;
         final String resID;
+        // these mappings may exist already, for secondary idempotent launches
         if (groupid == null) {
             vmidWhenJustOne = vms[0].getID();
-            resID = this.ids.newGrouplessInstanceID(vmidWhenJustOne,
-                                                    sshKeyName);
+            resID = this.ids.getOrNewInstanceReservationID(vmidWhenJustOne, sshKeyName);
         } else {
             vmidWhenJustOne = null;
-            resID = this.ids.newGroupReservationID(groupid);
+            resID = this.ids.getOrNewGroupReservationID(groupid);
         }
 
         final RunningInstancesSetType rist = new RunningInstancesSetType();
@@ -288,7 +292,8 @@ public class DefaultRun implements Run {
                 // mapping already created:
                 instID = this.ids.managerInstanceToElasticInstance(vmidWhenJustOne);
             } else {
-                instID = this.ids.newInstanceID(vm.getID(), resID, sshKeyName);
+                // this mapping may exist already, for secondary idempotent launches
+                instID = this.ids.getOrNewInstanceID(vm.getID(), resID, sshKeyName);
             }
 
             if (i != 0) {
@@ -303,7 +308,7 @@ public class DefaultRun implements Run {
         logger.info(buf.toString());
 
         final RunInstancesResponseType ret = new RunInstancesResponseType();
-        ret.setGroupSet(this.getGroupStub());
+        ret.setGroupSet(getGroupStub());
         final String ownerID = this.container.getOwnerID(caller);
         if (ownerID == null) {
             throw new CannotTranslateException("Cannot find owner ID");
@@ -366,7 +371,7 @@ public class DefaultRun implements Run {
     // -------------------------------------------------------------------------
 
     // todo: duped code; support groups
-    protected GroupSetType getGroupStub() {
+    public static GroupSetType getGroupStub() {
         final GroupItemType[] groupItemTypes = new GroupItemType[1];
         groupItemTypes[0] = new GroupItemType("default");
         return new GroupSetType(groupItemTypes);
@@ -393,7 +398,7 @@ public class DefaultRun implements Run {
         riit.setInstanceState(this.describe.getState(vm));
         riit.setReason(this.describe.getReason(vm));
         riit.setPlacement(this.describe.getPlacement());
-        riit.setImageId(this.describe.getImageID(vm));
+        riit.setImageId(this.describe.getImageID(vm.getVMFiles()));
         riit.setInstanceType(this.describe.getInstanceType(vm));
         riit.setLaunchTime(this.describe.getLaunchTime(vm));
         
@@ -403,12 +408,13 @@ public class DefaultRun implements Run {
         riit.setInstanceId(instID);
         riit.setKeyName(sshKeyName);
 
+        riit.setClientToken(vm.getClientToken());
 
         riit.setKernelId("default"); // todo
 
         riit.setMonitoring(new InstanceMonitoringStateType("disabled"));
+        riit.setProductCodes(new ProductCodesSetType(new ProductCodesSetItemType[]{}));
 
-        //riit.setProductCodes();
         //riit.setRamdiskId();
         //riit.setReason();
 
@@ -419,6 +425,21 @@ public class DefaultRun implements Run {
                                     RunningInstancesItemType riit)
             throws CannotTranslateException {
 
+
+        // ec2 only necessarily has networking information on a running
+        // instance. we can loosen up requirements here.
+
+        // this is motivated by idempotent instance support. In cases where
+        // an idempotent launch maps to an already-terminated instance,
+        // the VM object here will be in the terminated state and have no
+        // NICs information
+
+        final boolean isTerminated =
+                vm.getState().getState().equals(State.STATE_Cancelled);
+
+        if (isTerminated && (vm.getNics() == null || vm.getNics().length == 0)) {
+            return;
+        }
 
         final NIC[] nics = vm.getNics();
         if (nics == null || nics.length == 0) {

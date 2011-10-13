@@ -24,6 +24,7 @@ import org.globus.workspace.*;
 import org.globus.workspace.persistence.PersistenceAdapter;
 import org.globus.workspace.persistence.DataConvert;
 import org.globus.workspace.scheduler.Scheduler;
+import org.globus.workspace.service.binding.BindNetwork;
 import org.globus.workspace.service.binding.BindingAdapter;
 import org.globus.workspace.service.binding.GlobalPolicies;
 import org.globus.workspace.service.binding.vm.VirtualMachine;
@@ -80,13 +81,14 @@ public abstract class StatefulResourceImpl extends InstanceResourceImpl
                                    GlobalPolicies globalsImpl,
                                    DataConvert dataConvertImpl,
                                    Lager lagerImpl,
+                                   BindNetwork bindNetworkImpl,
                                    Scheduler schedulerImpl,
                                    LockManager lockMgrImpl,
                                    StateTransition transitionImpl,
                                    TimerManager timerManagerImpl) {
 
         super(persistenceImpl, bindingImpl, globalsImpl,
-              dataConvertImpl, lagerImpl);
+              dataConvertImpl, lagerImpl,bindNetworkImpl);
 
         if (schedulerImpl == null) {
             throw new IllegalArgumentException("schedulerImpl may not be null");
@@ -212,7 +214,7 @@ public abstract class StatefulResourceImpl extends InstanceResourceImpl
                     }
 
                     if(nsTrans != null) {
-                        nsTrans.unpropagationFinished(img);
+                        nsTrans.unpropagationFinished(img, this.getCreatorID(), vm);
                     }
                     break;
                 }
@@ -312,17 +314,14 @@ public abstract class StatefulResourceImpl extends InstanceResourceImpl
                 newstate == STATE_PAUSED ||
                 newstate == STATE_READYING_FOR_TRANSPORT ||
                 newstate == STATE_READY_FOR_TRANSPORT ||
+                newstate == STATE_DESTROY_SUCCEEDED ||
+                newstate == STATE_DESTROY_FAILED ||
                 newstate == STATE_STAGING_OUT) {
 
                 logger.debug("More termination work may be necessary, " +
                    "not ignoring setState during targetState==Destroying");
 
             } else {
-
-                logger.debug(Lager.id(this.id) + " is being destroyed, " +
-                    "ignoring set-state: " +
-                        this.dataConvert.stateName(newstate));
-
                 return;
             }
         }
@@ -360,7 +359,7 @@ public abstract class StatefulResourceImpl extends InstanceResourceImpl
                          "  = " + this.dataConvert.stateName(newstate));
         }
 
-        if (newstate == STATE_DESTROYING) {
+        if (newstate == STATE_DESTROY_SUCCEEDED) {
             do_remove();
             return;
         }
@@ -661,6 +660,7 @@ public abstract class StatefulResourceImpl extends InstanceResourceImpl
             case STATE_READY_FOR_TRANSPORT:
             case STATE_STAGED_OUT:
             case STATE_DESTROYING:
+            case STATE_DESTROY_FAILED:
             case STATE_CORRUPTED_GENERIC:
                 break;
             default:
@@ -682,5 +682,7 @@ public abstract class StatefulResourceImpl extends InstanceResourceImpl
                 && newstate <= STATE_LAST_LEGAL;
     }
 
-
+    public boolean isZombie() {
+        return this.state == STATE_DESTROY_FAILED;
+    }
 }

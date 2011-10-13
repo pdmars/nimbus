@@ -15,6 +15,7 @@
  */
 package org.globus.workspace.scheduler;
 
+import org.globus.workspace.persistence.WorkspaceDatabaseException;
 import org.globus.workspace.scheduler.defaults.ResourcepoolEntry;
 
 import java.util.List;
@@ -27,11 +28,13 @@ public interface NodeManagement {
                                      String networks,
                                      int memory,
                                      boolean active)
-            throws NodeExistsException;
+            throws NodeExistsException, NodeManagementDisabled, WorkspaceDatabaseException;
 
     //Read
-    public List<ResourcepoolEntry> getNodes();
-    public ResourcepoolEntry getNode(String hostname);
+    public List<ResourcepoolEntry> getNodes()
+            throws NodeManagementDisabled, WorkspaceDatabaseException;
+    public ResourcepoolEntry getNode(String hostname)
+            throws NodeManagementDisabled, WorkspaceDatabaseException;
 
     //Update
 
@@ -54,9 +57,10 @@ public interface NodeManagement {
                               String networks,
                               Integer memory,
                               Boolean active)
-            throws NodeInUseException, NodeNotFoundException;
+            throws NodeInUseException, NodeNotFoundException,
+                   NodeManagementDisabled, WorkspaceDatabaseException;
 
     //Delete                                                            `
     public boolean removeNode(String hostname)
-            throws NodeInUseException;
+            throws NodeInUseException, NodeManagementDisabled, WorkspaceDatabaseException;
 }

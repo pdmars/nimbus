@@ -18,6 +18,10 @@
         <constructor-arg ref="nimbus-elastic.rm.terminate" />
         <constructor-arg ref="nimbus-elastic.rm.reboot" />
         <constructor-arg ref="nimbus-elastic.rm.describe" />
+        <constructor-arg ref="nimbus-elastic.rm.requestSI" />
+        <constructor-arg ref="nimbus-elastic.rm.cancelSI" />
+        <constructor-arg ref="nimbus-elastic.rm.describeSI" /> 
+        <constructor-arg ref="nimbus-elastic.rm.spHistory" />                               
         <constructor-arg ref="nimbus-elastic.rm.containerInterface" />
         <constructor-arg ref="nimbus-elastic.rm.modulelocator" />
 
@@ -70,12 +74,54 @@
     </bean>
 
     <bean id="nimbus-elastic.rm.idmappings"
-          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultIDMgmt">
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultIDMgmtProxy" />
 
-        <constructor-arg value="$COMMON{caches.dir}" />
+    <bean id="nimbus-elastic.rm.persistence"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.general.defaults.DefaultElasticPersistence"
+            init-method="initialize">
+        <constructor-arg value="$OTHER_ELASTIC{elastic.db}"/>
+    </bean>
+
+    <!-- Don't reference this bean directly. See DefaultIDMgmtProxy class notes.  -->
+    <bean id="nimbus-elastic.rm.realidmappings"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultIDMgmt">
+        <constructor-arg ref="nimbus-elastic.rm.persistence"/>
+    </bean>
+
+    <!-- ************ Spot Instances *********** -->
+
+    <bean id="nimbus-elastic.rm.requestSI"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultRequestSI">
+
+        <constructor-arg ref="nimbus-elastic.general.ra" />
+        <constructor-arg ref="nimbus-elastic.general.networks" />
+        <constructor-arg ref="nimbus-elastic.image.repository" />        
+        <constructor-arg ref="nimbus-elastic.rm.idmappings" />
+        <constructor-arg ref="nimbus-elastic.rm.describe" />
+        <constructor-arg ref="nimbus-elastic.rm.describeSI" />    
+        <constructor-arg ref="nimbus-elastic.rm.cancelSI" />                    
+        <constructor-arg ref="nimbus-elastic.rm.containerInterface" />
+        <constructor-arg ref="nimbus-elastic.security.sshkeys" />
+        <constructor-arg ref="nimbus-elastic.rm.modulelocator" />
 
     </bean>
 
+    <bean id="nimbus-elastic.rm.cancelSI"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultCancelSI" />
+
+    <bean id="nimbus-elastic.rm.describeSI"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultDescribeSI">
+
+        <constructor-arg ref="nimbus-elastic.rm.idmappings" />
+        <constructor-arg ref="nimbus-elastic.rm.describe" />
+        <constructor-arg ref="nimbus-elastic.general.ra" />
+    </bean>
+    
+    <bean id="nimbus-elastic.rm.spHistory"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.rm.defaults.DefaultDescribeSpotPriceHistory">
+          
+        <constructor-arg ref="nimbus-elastic.general.ra" />
+    </bean>
     
     <!-- ************ ServiceGeneral *********** -->
 
@@ -106,6 +152,7 @@
          <property name="cpuArch" value="$OTHER_ELASTIC{cpu.arch}" />
          <property name="vmmType" value="$OTHER_ELASTIC{vmm.type}" />
          <property name="vmmVersion" value="$OTHER_ELASTIC{vmm.version}" />
+         <property name="siType" value="$ASYNC{async.instancetype}" />
 
     </bean>
     
@@ -150,8 +197,7 @@
           class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.security.defaults.DefaultSSHKeys"
           init-method="validate">
 
-        <!-- key cache provider -->
-        <constructor-arg ref="nimbus-elastic.rm.idmappings" />
+        <constructor-arg ref="nimbus-elastic.rm.persistence" />
         <property name="pubkeyOnly" value="$ELASTIC{ssh.pubkey.only}" />
         <property name="splitToken" value="$ELASTIC{ssh.split.token}" />
 
@@ -180,6 +226,7 @@
 
     </bean>
 
+    <!--
     <bean id="nimbus-elastic.image.repository"
           class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.defaults.DefaultRepository"
           init-method="validate">
@@ -195,7 +242,50 @@
         <property name="idAuthz" value="$ELASTIC{repository.idauthz}" />
 
     </bean>
+    -->
+    <bean id="other.AuthzDataSource"
+         class="org.apache.commons.dbcp.BasicDataSource">
+       <property name="driverClassName" value="org.sqlite.JDBC" />
+       <property name="maxActive" value="10" />
+       <property name="maxIdle" value="4" />
+       <property name="maxWait" value="2000" />
+       <property name="poolPreparedStatements" value="true" />
+
+       <property name="url"
+                 value="jdbc:sqlite://$CUMULUS{cumulus.authz.db}" />
+       <property name="username" value="nimbus"/>
+       <property name="password" value="nimbus"/>
+   </bean>
+
+   <bean id="other.repo-imageLocator"
+         class="org.nimbus.authz.CumulusImageLocator"
+         init-method="validate">
+
+        <constructor-arg ref="other.AuthzDataSource" />
+
+        <property name="repoBucket" value="$CUMULUS{cumulus.repo.bucket}" />
+        <property name="prefix" value="$CUMULUS{cumulus.repo.prefix}" />
+        <property name="cumulusHost" value="$CUMULUS{cumulus.host}" />
+        <property name="rootFileMountAs" value="$OTHER_ELASTIC{rootfile.mountas}" />
+        
+   </bean>
     
+    <bean id="nimbus-elastic.image.repository"
+          class="org.nimbustools.messaging.gt4_0_elastic.v2008_05_05.image.defaults.CumulusRepository"
+          init-method="validate">
+
+        <constructor-arg ref="nimbus-elastic.rm.containerInterface" />
+        <constructor-arg ref="nimbus-elastic.rm.modulelocator" />
+        <constructor-arg ref="other.AuthzDataSource" />
+        <constructor-arg ref="other.repo-imageLocator" />
+
+        <property name="repoBucket" value="$CUMULUS{cumulus.repo.bucket}" />
+        <property name="cumulusPublicUser" value="$CUMULUS{cumulus.publicuser}" />
+        <property name="prefix" value="$CUMULUS{cumulus.repo.prefix}" />
+        <property name="rootFileMountAs" value="$OTHER_ELASTIC{rootfile.mountas}" />
+
+    </bean>
+
     <bean id="nimbus-query.httpserver" 
           class="org.nimbustools.messaging.query.HttpQuery" 
           init-method="startListening">

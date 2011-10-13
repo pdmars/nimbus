@@ -37,24 +37,57 @@ bd=`dirname $0`
 cd $bd
 src_dir=`pwd`
 
-repo_dir="$work_dir/src"
-mkdir $repo_dir
-cd $repo_dir
 
-repo="git://github.com/nimbusproject/nimbus.git"
-if [ "X$NIMBUS_REPO" != "X" ]; then
-    repo=$NIMBUS_REPO
+if [ "X$NIMBUS_SRC_DIR" == "X" ]; then
+    echo "Going to use git"
+    repo_dir="$work_dir/src"
+    mkdir $repo_dir
+    cd $repo_dir
+
+    repo="git://github.com/nimbusproject/nimbus.git"
+    if [ "X$NIMBUS_REPO" != "X" ]; then
+        repo=$NIMBUS_REPO
+    fi
+    echo "Checking out nimbus from $repo"
+    git clone --depth 1 $repo nimbus
+    if [ $? -ne 0 ]; then
+        echo "failed to checkout git from $NIMBUS_REPO"
+        exit 1
+    fi
+
+    nimbus_source_dir=$repo_dir/nimbus
+    nimbus_wsc_source_dir=$nimbus_source_dir/control/ 
+    nimbus_cc_dir=$nimbus_source_dir/cloud-client
+    mkdir $nimbus_wsc_dir
+    unset CLOUD_CLIENT_HOME
+else
+    echo "Going to use premade dirs"
+
+    if [ "X$NIMBUS_WSC_SRC_DIR" = "X" ]; then
+        echo "Either unset NIMBUS_SRC_DIR or set NIMBUS_WSC_SRC_DIR"
+        exit 1
+    fi 
+    if [ "X$NIMBUS_CC_DIR" = "X" ]; then
+        echo "Either unset NIMBUS_SRC_DIR or set NIMBUS_CC_DIR"
+        exit 1
+    fi 
+    if [ "X$CLOUD_CLIENT_HOME" = "X" ]; then
+        echo "Either unset NIMBUS_SRC_DIR or set CLOUD_CLIENT_HOME"
+        exit 1
+    fi 
+
+    nimbus_source_dir=$NIMBUS_SRC_DIR
+    nimbus_wsc_source_dir=$NIMBUS_WSC_SRC_DIR/workspace-control/
+    export CLOUD_CLIENT_HOME=$NIMBUS_CC_DIR
+    nimbus_cc_dir=$CLOUD_CLIENT_HOME
 fi
-echo "Checking out nimbus from $repo"
-git clone --depth 1 $repo
-if [ $? -ne 0 ]; then
-    echo "failed to checkout git from $NIMBUS_REPO"
-    exit 1
-fi
+wsc_dst_src=$work_dir/control
+mkdir $wsc_dst_src
 
 install_dir=$work_dir/NIMBUSINSTALL
+export NIMBUS_HOME=$install_dir
 
-cd nimbus/
+cd $nimbus_source_dir
 echo "========================================="
 echo "Installing nimbus"
 echo "========================================="
@@ -86,36 +119,65 @@ ssh localhost hostname
 rc=$?
 echo "ssh return code $rc"
 
-export NIMBUS_WORKSPACE_CONTROL_HOME="$work_dir/control"
-cp -r $repo_dir/nimbus/control/  $work_dir
+export NIMBUS_WORKSPACE_CONTROL_HOME=$wsc_dst_src
+cp -r $nimbus_wsc_source_dir/*  $wsc_dst_src
+if [ $? -ne 0 ]; then
+    echo "could not copy in WSC:: cp -r $nimbus_wsc_source_dir/*  $wsc_dst_src"
+    exit 1
+fi
+
 sed -e "s^@NIMBUS_WORKSPACE_CONTROL_HOME@^$NIMBUS_WORKSPACE_CONTROL_HOME^" -e "s^@KEY@^$new_key^" -e "s/@WHO@/$user/" $src_dir/autoconfig-decisions.sh.in > $install_dir/services/share/nimbus-autoconfig/autoconfig-decisions.sh
 
 cat $install_dir/services/share/nimbus-autoconfig/autoconfig-decisions.sh
 
 $install_dir/services/share/nimbus-autoconfig/autoconfig-adjustments.sh
 
-cd $work_dir/control
-bash ./src/propagate-only-mode.sh
+#cd $work_dir/control
+cd $wsc_dst_src
+pwd
+if [ "X$NIMBUS_TEST_REAL" == "X" ]; then
+    bash ./src/propagate-only-mode.sh
+fi
+
+if [ $? -ne 0 ]; then
+    echo "PROP ONLY MODE CONFIGURATION FAILED"
+    exit 1
+fi
 
 echo "========================================="
 echo "Making cloud client"
 echo "========================================="
 
-cd $repo_dir/nimbus/cloud-client
-bash ./builder/get-wscore.sh
-bash ./builder/dist.sh
-cd $work_dir
-tar -zxvf $repo_dir/nimbus/cloud-client/nimbus-cloud-client*.tar.gz
+if [ "X$CLOUD_CLIENT_HOME" == "X" ]; then
+    cd $nimbus_cc_dir
+    pwd
+    bash ./builder/get-wscore.sh
+    if [ $? -ne 0 ]; then
+        echo "bash ./builder/get-wscore.sh failed"
+        exit 1
+    fi
+    bash ./builder/dist.sh
+    if [ $? -ne 0 ]; then
+        echo "bash ./builder/dist.sh failed"
+        exit 1
+    fi
+    cd $work_dir
+    tar -zxvf $nimbus_cc_dir/nimbus-cloud-client*.tar.gz
+    if [ $? -ne 0 ]; then
+        echo "failed to untar $nimbus_cc_dir/nimbus-cloud-client*.tar.gz"
+        exit 1
+    fi
 
-cd nimbus-cloud-client*
-./bin/cloud-client.sh --help
-export CLOUD_CLIENT_HOME=`pwd`
+    cd nimbus-cloud-client*
+    ./bin/cloud-client.sh --help
+    export CLOUD_CLIENT_HOME=`pwd`
+fi
 
 echo "========================================="
 echo "Making a common user"
 echo "========================================="
 user_name="nimbus@$RANDOM"
-user_stuff=`$install_dir/bin/nimbus-new-user --group 04 --batch -r cloud_properties,cert,key,access_id,access_secret $user_name`
+user_stuff=`$install_dir/bin/nimbus-new-user --batch -r cloud_properties,cert,key,access_id,access_secret $user_name`
 aid=`echo $user_stuff | awk -F , '{ print $4 }'` 
 apw=`echo $user_stuff | awk -F , '{ print $5 }'` 
 
@@ -127,7 +189,7 @@ echo "Making a new user"
 echo "========================================="
 
 user_name="nimbus@$RANDOM"
-user_stuff=`$install_dir/bin/nimbus-new-user --group 04 --batch -r cloud_properties,cert,key,access_id,access_secret,canonical_id $user_name`
+user_stuff=`$install_dir/bin/nimbus-new-user --batch -r cloud_properties,cert,key,access_id,access_secret,canonical_id $user_name`
 
 echo $user_stuff
 cp=`echo $user_stuff | awk -F , '{ print $1 }'` 
@@ -139,11 +201,18 @@ can_id=`echo $user_stuff | awk -F , '{ print $6 }'`
 
 sed -e "s^@ID@^$aid^" -e "s/@KEY@/$apw/" $src_dir/s3cfg.in > $HOME/.s3cfg.reg
 
+pwd
 echo $cp
 echo $cert
 echo $key
 
-cp $install_dir/var/ca/ca-certs/*  lib/certs/
+cd $CLOUD_CLIENT_HOME
+cp $install_dir/var/ca/ca-certs/*  $CLOUD_CLIENT_HOME/lib/certs/
+if [ $? -ne 0 ]; then
+    pwd
+    echo "could not copy to $CLOUD_CLIENT_HOME/lib/certs/"
+    exit 1
+fi
 cp $cp conf/
 
 mkdir $HOME/.nimbus
@@ -155,7 +224,8 @@ echo "reporitng contents of dot nimbus and globus"
 ls -l $HOME/.nimbus/
 ls -l $HOME/.globus/
 
-./bin/grid-proxy-init.sh
+cd $CLOUD_CLIENT_HOME
+$CLOUD_CLIENT_HOME/bin/grid-proxy-init.sh
 
 echo "========================================="
 echo "Setting up VMM and network pools"
@@ -187,7 +257,7 @@ done=1
 try_count=0
 while [ $done -ne 0 ];
 do
-    $install_dir/bin/nimbus-nodes --add localhost --memory 10240
+    $src_dir/nimbus-nodes.sh
     if [ $? -eq 0 ]; then
         done=0
     else
@@ -215,7 +285,6 @@ cp $src_dir/public  $install_dir/services/etc/nimbus/workspace-service/network-p
 
 
 echo $work_dir
-export NIMBUS_HOME=$install_dir
 export NIMBUS_TEST_USER=$user_name
 
 echo "Your test environment is:"
@@ -231,4 +300,7 @@ echo "export NIMBUS_TEST_USER=$NIMBUS_TEST_USER" >> $src_dir/env.sh
 echo "export CLOUD_CLIENT_HOME=$CLOUD_CLIENT_HOME" >> $src_dir/env.sh
 echo "export NIMBUS_WORKSPACE_CONTROL_HOME=$NIMBUS_WORKSPACE_CONTROL_HOME" >> $src_dir/env.sh
 echo "export NIMBUS_TEST_USER_CAN_ID=$can_id" >> $src_dir/env.sh
+echo "export NIMBUS_TEST_IMAGE=group" >> $src_dir/env.sh
+echo "export NIMBUS_SOURCE_TEST_IMAGE=/etc/group" >> $src_dir/env.sh
+echo "export NIMBUS_TEST_TIMEOUT=90" >> $src_dir/env.sh
 

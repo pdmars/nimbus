@@ -32,10 +32,11 @@ public interface SlotManagement {
 
     /**
      * @param request a single workspace or homogenous group-workspace request
+     * @param preemptable indicates if the space can be pre-empted by higher priority reservations
      * @return Reservation res
      * @throws ResourceRequestDeniedException exc
      */
-    public Reservation reserveSpace(NodeRequest request)
+    public Reservation reserveSpace(NodeRequest request, boolean preemptable)
                   throws ResourceRequestDeniedException;
 
     /**
@@ -50,12 +51,24 @@ public interface SlotManagement {
                   throws ResourceRequestDeniedException;
 
     /**
-     * Only handling per VM release now.
+     * Release space for a known VM
      *
      * @param vmid vmid
      * @throws ManageException exc
      */
     public void releaseSpace(int vmid) throws ManageException;
+
+
+    /**
+     * Release space for an incomplete VM launch
+     * @param nodeRequest the request containing VM parameters
+     * @param reservation a pending reservation
+     * @param preemptable whether launch is preemptable
+     * @throws ManageException
+     */
+    void releaseSpace(NodeRequest nodeRequest,
+                      Reservation reservation,
+                      boolean preemptable) throws ManageException;
 
     /**
      * @return true if implementation can support coscheduling
@@ -87,4 +100,9 @@ public interface SlotManagement {
      * @return true if neededAssociations is supported
      */
     public boolean isNeededAssociationsSupported();
+
+    /**
+     * @return human readable VMM insight
+     */
+    public String getVMMReport();
 }

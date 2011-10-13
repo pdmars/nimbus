@@ -127,6 +127,10 @@ public class AllArgs {
     private String brokerURL;
     private String brokerID;
     private int timeoutMinutes;
+    private boolean common_image = false;
+    private boolean nospinner = false;
+
+    private String imageDescString = null;
 
     // ------------------------------------
 
@@ -516,6 +520,24 @@ public class AllArgs {
                             Integer.toString(this.timeoutMinutes));
         }
 
+        if (line.hasOption(Opts.COMMON_OPT_STRING)) {
+            this.common_image = true;
+            this.gotCmdLine(Opts.COMMON_OPT_STRING, "enabled");
+        }
+
+        if (line.hasOption(Opts.IMAGE_DESC_OPT_STRING))
+        {
+            final String imageDescString =
+                    line.getOptionValue(Opts.IMAGE_DESC_OPT_STRING);
+            this.imageDescString = imageDescString;
+            this.gotCmdLine(Opts.IMAGE_DESC_OPT_STRING, imageDescString);
+        }
+
+        if (line.hasOption(Opts.NOSPINNER_OPT_STRING)) {
+            this.nospinner = true;
+            this.gotCmdLine(Opts.NOSPINNER_OPT_STRING, "enabled");
+        }
+
         if (line.hasOption(Opts.TRANSFER_OPT_STRING)) {
             this.actions.add(ACTION_TRANSFER);
             this.gotCmdLine(Opts.TRANSFER_OPT_STRING,
@@ -615,8 +637,13 @@ public class AllArgs {
         final Enumeration e = props.keys();
         while (e.hasMoreElements()) {
             final String key = (String) e.nextElement();
-            final String val = props.getProperty(key);
+            String val = props.getProperty(key);
             this.print.dbg("  KEY  : " + key);
+
+            if (key.equals("vws.repository.s3key") || key.equals("vws.repository.s3id"))
+            {
+                val = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+            }
             this.print.dbg("  VALUE: " + val);
             this.print.dbg("  ");
         }
@@ -978,6 +1005,11 @@ public class AllArgs {
     }
 
     private String resolvePathProperty(String key, String val, String sourcePath) {
+        if(val.indexOf("~/") == 0)
+        {
+            String home_dir = System.getProperty("user.home") + "/";                
+            val = val.replaceFirst("~/", home_dir);
+        }
         File f = new File(val);
         if (!f.isAbsolute() && sourcePath != null) {
             f = new File(new File(sourcePath).getParent(), val);
@@ -1226,6 +1258,26 @@ public class AllArgs {
 
     public void setCores(int cores) {
         this.cores = cores;
+    }
+
+    public boolean getCommonVMSet() {
+           return this.common_image;
+    }
+
+    public void setCommonVMSet(boolean b) {
+           this.common_image = b;
+    }
+
+    public String getVMDescription() {
+        return this.imageDescString;
+    }
+
+    public boolean getNoSpinner() {
+           return this.nospinner;
+    }
+
+    public void setNoSpinner(boolean b) {
+           this.nospinner = b;
     }
 
     public String getName() {

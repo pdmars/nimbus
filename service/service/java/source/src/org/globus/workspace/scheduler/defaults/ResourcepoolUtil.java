@@ -21,6 +21,8 @@ import org.apache.commons.logging.LogFactory;
 import org.globus.workspace.Lager;
 import org.globus.workspace.persistence.PersistenceAdapter;
 import org.globus.workspace.persistence.WorkspaceDatabaseException;
+import org.nimbustools.api.services.rm.ImpossibleAmountOfMemoryException;
+import org.nimbustools.api.services.rm.NotEnoughMemoryException;
 import org.nimbustools.api.services.rm.ResourceRequestDeniedException;
 import org.nimbustools.api.services.rm.ManageException;
 
@@ -41,7 +43,6 @@ class ResourcepoolUtil {
         LogFactory.getLog(ResourcepoolUtil.class.getName());
 
     private static final Random randomGen = new SecureRandom();
-
 
     /**
      * Look at all the available nodes, pick the node with the least amount of available space
@@ -191,6 +192,7 @@ class ResourcepoolUtil {
      * @param lager logging switches
      * @param vmid for logging
      * @param greedy true if VMs should stack up on VMMs first, false if round robin
+     * @param preemptable indicates if the space can be pre-empted by higher priority reservations
      * @return node name can not be null
      * @throws ResourceRequestDeniedException exc
      * @throws WorkspaceDatabaseException exc
@@ -200,7 +202,8 @@ class ResourcepoolUtil {
             final PersistenceAdapter db,
             Lager lager,
             int vmid,
-            boolean greedy)
+            boolean greedy,
+            boolean preemptable)
     throws ResourceRequestDeniedException,
     WorkspaceDatabaseException {
 
@@ -216,7 +219,12 @@ class ResourcepoolUtil {
 
         if (trace) {
             traceLookingForResource(mem, neededAssociations, greedy);
-        }        
+        }
+
+        if (db.isInfeasibleRequest(mem)) {
+            throw new ImpossibleAmountOfMemoryException(mem + "MB memory request is too " +
+                                            "large to ever be fulfilled");
+        }
 
         //availableEntries is never empty
         final List<ResourcepoolEntry> availableEntries =
@@ -234,14 +242,18 @@ class ResourcepoolUtil {
         }
 
         entry.addMemCurrent(-mem);
+        if(preemptable){
+            entry.addMemPreemptable(mem);
+        }
         db.updateResourcepoolEntryAvailableMemory(entry.getHostname(),
-                entry.getMemCurrent());
+                entry.getMemCurrent(), entry.getMemPreemptable());
 
         if (eventLog) {
             logger.info(Lager.ev(vmid) + "'" + entry.getResourcePool() +
                     "' resource pool entry '" + entry.getHostname() +
                     "': " + mem + " MB reserved, " +
-                    entry.getMemCurrent() + " MB left");
+                    entry.getMemCurrent() + " MB left, " +
+                    entry.getMemPreemptable() + " MB preemptible");
         }
 
         return entry.getHostname();            
@@ -259,7 +271,7 @@ class ResourcepoolUtil {
         if(availableEntries.isEmpty()){
             String err = "No resource is available for this request (based on memory).";
             logger.error(err);
-            throw new ResourceRequestDeniedException(err);
+            throw new NotEnoughMemoryException(err);
         }
 
         netFilter(availableEntries, neededAssociations, trace);
@@ -332,7 +344,8 @@ class ResourcepoolUtil {
                           PersistenceAdapter db,
                           boolean eventLog,
                           boolean traceLog,
-                          int vmid)
+                          int vmid,
+                          boolean preemptable)
 
             throws ManageException {
 
@@ -355,6 +368,9 @@ class ResourcepoolUtil {
             final String poolname = entry.getResourcePool();
 
             entry.addMemCurrent(mem);
+            if(preemptable){
+                entry.addMemPreemptable(-mem);
+            }
 
             // If the node's memory capacity was changed during this VM's
             // deployment, there can be a situation when this addition
@@ -365,7 +381,7 @@ class ResourcepoolUtil {
             }
 
             db.updateResourcepoolEntryAvailableMemory(entry.getHostname(),
-                entry.getMemCurrent());
+                entry.getMemCurrent(), entry.getMemPreemptable());
 
             if (eventLog) {
                 logger.info(Lager.ev(vmid) + "'" + poolname +

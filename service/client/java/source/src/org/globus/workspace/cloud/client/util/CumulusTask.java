@@ -31,6 +31,7 @@ import org.globus.workspace.common.print.Print;
 import org.jets3t.service.Jets3tProperties;
 import org.jets3t.service.S3Service;
 import org.jets3t.service.S3ServiceException;
+import org.jets3t.service.acl.AccessControlList;
 import org.jets3t.service.impl.rest.httpclient.RestS3Service;
 import org.jets3t.service.io.BytesProgressWatcher;
 import org.jets3t.service.model.S3Object;
@@ -39,11 +40,7 @@ import org.jets3t.service.utils.Mimetypes;
 import org.jets3t.service.utils.ObjectUtils;
 
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintStream;
+import java.io.*;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -239,7 +236,7 @@ class CumulusInputStream
     extends InputStream
 {
     private InputStream                 is;
-    private PrintStream pr;
+    private PrintStream                 pr;
     private CloudProgressPrinter        progress;
     private long                        where = 0;
     private long                        marked = 0;
@@ -247,13 +244,14 @@ class CumulusInputStream
     public CumulusInputStream(
         long                            len,
         PrintStream                     pr,
-        InputStream                     is)
+        InputStream                     is,
+        boolean                         noprint)
     {
         super();
         this.is = is;
         this.pr = pr;   
 
-        progress = new CloudProgressPrinter(this.pr, len);
+        progress = new CloudProgressPrinter(this.pr, len, noprint);
     }
  
     public int available()
@@ -265,10 +263,11 @@ class CumulusInputStream
     public void   close()
         throws java.io.IOException
     {
-        this.progress.flush();
         this.is.close();
+        this.progress.flush();
+        this.progress.print_done();
     }
- 
+
     public void   mark(int readlimit)
     {
         marked = where;
@@ -334,6 +333,9 @@ class CloudProgressPrinter
 {
     private PrintStream                 pr;
     private int                         colCount = 80;
+    private Date                        nextUpdate = null;
+    private boolean                     hit100 = false;
+    private boolean                     noprint = false;
 
     public CloudProgressPrinter(
         PrintStream                     pr,
@@ -341,6 +343,16 @@ class CloudProgressPrinter
     {
         super(len);
         this.pr = pr;
+    }
+
+    public CloudProgressPrinter(
+        PrintStream                     pr,
+        long                            len,
+        boolean                         noprint)
+    {
+        super(len);
+        this.pr = pr;
+        this.noprint = noprint;        
     }
 
     // return a string with the long value properly suffixed 
@@ -404,6 +416,7 @@ class CloudProgressPrinter
         int percent = (int)((sofar * 100) / total);
         int xCount = (percent * pgLen) / 100;
 
+
         String bar = byteString + " [";
         for(int i = 0; i < pgLen; i++)
         {
@@ -418,6 +431,12 @@ class CloudProgressPrinter
         }
         bar = bar + "] " + percent + "% ";
 
+
+        if(sofar  == total)
+        {
+            this.hit100 = true;           
+        }
+
         return bar;
     }       
 
@@ -425,11 +444,45 @@ class CloudProgressPrinter
         long                            byteCount)
     {
         super.updateBytesTransferred(byteCount);
-        this.flush();
+        this.print_bar();
+    }
+
+    public void print_bar()
+    {
+        Calendar now = 	Calendar.getInstance();
+        Date nowDt = now.getTime();
+
+        if (this.nextUpdate != null && nowDt.before(this.nextUpdate))
+        {
+            return;
+        }
+        this.nextUpdate = new Date(nowDt.getTime() + 1000);
+        flush();
+    }
+
+    public void print_done()
+    {
+        if(this.noprint)
+        {
+            return;
+        }
+        long total = getBytesToTransfer();
+        String bar = this.makeBar(total, total);
+        System.out.print("\r");
+        System.out.print(bar);
+        System.out.flush();
     }
 
     public void flush()
     {
+        if(this.hit100)
+        {
+            return;
+        }
+        if(this.noprint)
+        {
+            return;
+        }
         long total = getBytesToTransfer();
            
         long sent = getBytesTransferred();
@@ -453,6 +506,7 @@ public class CumulusTask
     public static final int UPLOAD_TASK = 2;
     public static final int DOWNLOAD_TASK = 3;
     public static final int LIST_TASK = 4;
+    public static final String descSuffix = ".description";
 
     private int task = -1;
 
@@ -499,6 +553,10 @@ public class CumulusTask
         String                          vmName,
         String                          ID)
     {
+        if(this.args.getCommonVMSet())
+        {
+            ID = "common";
+        }
         String baseKey = this.args.getXferS3BaseKey();
         if(ID == null)
         {
@@ -543,13 +601,16 @@ public class CumulusTask
     public void uploadVM(
         String                          localfile,
         String                          vmName,
+        String                          description,
         PrintStream                     info,
         PrintStream                     debug)
             throws ExecutionProblem
     {
         S3Service s3Service = null;
+        boolean rw = true;
         try
         {
+            AccessControlList acl = null;
             String awsAccessKey = this.args.getXferS3ID();
             s3Service = this.getService();
 
@@ -574,23 +635,48 @@ public class CumulusTask
                 pr.println("Preparing the file for transfer:");
             } 
 
-            BytesProgressWatcher progressWatcher = 
-                new CloudProgressPrinter(pr, file.length());
+            CloudProgressPrinter progressWatcher =
+                new CloudProgressPrinter(pr, file.length(), this.args.getNoSpinner());
             S3Object s3Object = ObjectUtils.createObjectForUpload(
                 key, file, null, false, progressWatcher);
+            progressWatcher.flush();
             s3Object.setContentType(Mimetypes.MIMETYPE_OCTET_STREAM);
             if (pr != null) {
                 pr.println("\n\nTransferring the file:");
             }
             CumulusInputStream cis = new CumulusInputStream(
-                file.length(), pr, s3Object.getDataInputStream());
+                file.length(), pr, s3Object.getDataInputStream(), this.args.getNoSpinner());
             s3Object.setDataInputStream(cis);
+            if(this.args.getCommonVMSet())
+            {
+                if (pr != null) {
+                    pr.println("Setting permissions for common use.");
+                }
+                rw = false;
+                acl = AccessControlList.REST_CANNED_PUBLIC_READ;
+                s3Object.setAcl(acl);
+            }
             s3Service.putObject(baseBucketName, s3Object);
+            progressWatcher.flush();
             s3Object.closeDataInputStream();
             cis.close();
 
+            if(description != null)
+            {
+                String descObjName = getDescriptionFileKey(vmName, rw);
+
+                S3Object descObj = new S3Object(descObjName, description);
+                if (acl != null)
+                {
+                    descObj.setAcl(acl);
+                }
+                s3Service.putObject(baseBucketName, descObj);
+            }
+
             if (pr != null) {
-                pr.println("\n\nDone.");
+                pr.println("");
+                pr.println("");
+                pr.println("Done.");
             }
         }
         catch(S3ServiceException s3ex)
@@ -644,7 +730,7 @@ public class CumulusTask
             S3Object s3Object = s3Service.getObject(baseBucketName, key);
 
             BytesProgressWatcher progressWatcher = 
-                new CloudProgressPrinter(pr, s3Object.getContentLength());
+                new CloudProgressPrinter(pr, s3Object.getContentLength(), this.args.getNoSpinner());
             byte b [] = new byte[1024*64];
             InputStream dis = s3Object.getDataInputStream();
             FileOutputStream fos = new FileOutputStream(file);
@@ -761,6 +847,8 @@ public class CumulusTask
         j3p.setProperty("s3service.disable-dns-buckets", "true");
         j3p.setProperty("s3service.s3-endpoint", host);   
         j3p.setProperty("s3service.https-only", this.useHttps);
+        j3p.setProperty("storage-service.internal-error-retry-max", "0");
+        j3p.setProperty("httpclient.socket-timeout-ms", "0");
 
         HostConfiguration hc = new HostConfiguration();
         if(allowSelfSigned && this.useHttps.equalsIgnoreCase("true"))
@@ -891,9 +979,9 @@ public class CumulusTask
             ArrayList files = new ArrayList();
             // first get all of this users objects
             S3Object[] usersVMs = s3Service.listObjects(baseBucketName, keyName, "", 1000);
-            s3ObjToFileList(files, usersVMs, true);
+            s3ObjToFileList(files, usersVMs, true, s3Service);
             S3Object[] VMs = s3Service.listObjects(baseBucketName, this.makeKey("", "common"), "", 1000);
-            s3ObjToFileList(files, VMs, false);
+            s3ObjToFileList(files, VMs, false, s3Service);
 
             return (FileListing[]) files.toArray(new FileListing[files.size()]);
         }
@@ -907,10 +995,55 @@ public class CumulusTask
         }
     }
 
+    private String getDescriptionFileKey(String name, boolean rw)
+    {
+        String ID = "common";
+        if(rw)
+        {
+            ID = this.args.getXferCanonicalID();
+        }
+        String baseKey = this.args.getXferS3BaseKey() + this.descSuffix;
+        String key = baseKey + "/" + ID + "/" + name;
+
+        return key;
+    }
+
+    private String s3DownloadImageDescription(String name, boolean rw, S3Service s3Service)
+            throws ExecutionProblem
+    {
+        String description = null;
+
+        try
+        {
+            String baseBucketName = this.args.getS3Bucket();            
+            String key = getDescriptionFileKey(name, rw);
+
+            s3Service = this.getService();
+            S3Object s3Object = s3Service.getObject(baseBucketName, key);
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(s3Object.getDataInputStream()));
+
+            String data;
+            StringBuffer sb = new StringBuffer();
+            while ((data = reader.readLine()) != null)
+            {
+                sb.append(data);
+            }
+            description = sb.toString();                        
+        }
+        catch(Exception s3ex)
+        {
+            //throw new ExecutionProblem(s3ex.toString());
+        }
+
+        return description;
+    }
+
     private void s3ObjToFileList(
         ArrayList                       files,
         S3Object []                     s3Objs,
-        boolean                         rw)
+        boolean                         rw,
+        S3Service                       s3Service)
           throws ExecutionProblem 
     {
         Calendar cal = Calendar.getInstance();
@@ -935,6 +1068,9 @@ public class CumulusTask
                 fl.setDirectory(false);
                 fl.setReadWrite(rw);
                 fl.setOwner(s3Objs[i].getOwner().getDisplayName());
+
+                String desc = this.s3DownloadImageDescription(name, rw, s3Service);
+                fl.setDescription(desc);
 
                 files.add(fl);
             }
@@ -1010,6 +1146,7 @@ public class CumulusTask
                 this.uploadVM(
                     this.localfile,
                     this.vmName,
+                    this.args.getVMDescription(),
                     this.info,
                     this.debug);
                 break;

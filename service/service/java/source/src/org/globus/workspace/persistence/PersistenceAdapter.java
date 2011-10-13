@@ -16,16 +16,21 @@
 
 package org.globus.workspace.persistence;
 
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Hashtable;
 import java.util.List;
 
+import org.globus.workspace.async.AsyncRequest;
+import org.globus.workspace.async.backfill.Backfill;
+import org.globus.workspace.creation.IdempotentReservation;
 import org.globus.workspace.network.AssociationEntry;
 import org.globus.workspace.scheduler.defaults.ResourcepoolEntry;
 import org.globus.workspace.service.CoschedResource;
 import org.globus.workspace.service.GroupResource;
 import org.globus.workspace.service.InstanceResource;
-import org.globus.workspace.service.binding.vm.CustomizationNeed;
+import org.nimbustools.api.repr.SpotPriceEntry;
+import org.globus.workspace.service.binding.vm.FileCopyNeed;
 import org.nimbustools.api.services.rm.DoesNotExistException;
 
 /**
@@ -62,7 +67,7 @@ public interface PersistenceAdapter {
 
             throws WorkspaceDatabaseException;
 
-    public void setCustomizeTaskSent(int id, CustomizationNeed need)
+    public void setFileCopyOnImage(int id, FileCopyNeed need)
 
             throws WorkspaceDatabaseException;
 
@@ -150,7 +155,9 @@ public interface PersistenceAdapter {
 
             throws WorkspaceDatabaseException;
 
-    public void updateResourcepoolEntryAvailableMemory(String hostname, int newAvailMemory)
+    public void updateResourcepoolEntryAvailableMemory(String hostname,
+                                                       int newAvailMemory, 
+                                                       int preemptibleMemory)
 
             throws WorkspaceDatabaseException;
 
@@ -172,7 +179,7 @@ public interface PersistenceAdapter {
 
             throws WorkspaceDatabaseException;
 
-    public void addCustomizationNeed(int id, CustomizationNeed need)
+    public void addCustomizationNeed(int id, FileCopyNeed need)
 
             throws WorkspaceDatabaseException;
 
@@ -198,11 +205,121 @@ public interface PersistenceAdapter {
     
             throws WorkspaceDatabaseException;
 
+    // returns true if memory request is bigger than any VMM could ever handle
+    public boolean isInfeasibleRequest(int requestedMem) throws WorkspaceDatabaseException;
+    
+    //Spot Instances
+    
+    public Integer getTotalMaxMemory()
+    
+            throws WorkspaceDatabaseException;
+    
+    public Integer getTotalAvailableMemory()
+    
+            throws WorkspaceDatabaseException;    
+    
+    /**
+     * Gets the total available memory as
+     * a sum of integer available chunks from 
+     * each  resource pool entry
+     * 
+     * This is useful for knowing the exact
+     * amount of memory that is readily available
+     * for allocations of that chunk size (ie. 128MB),
+     * and not incurring the risk of having
+     * 64MB in one VMM and 64MB in another,
+     * what will not suffice to allocate a 128MB
+     * VM (although 128MB are theoretically
+     * available)
+     * 
+     * @param multipleOf size of the chunk
+     * @return the total available memory as a 
+     * multiple of the chunk size (ie: result%multipleOf = 0)
+     * @throws WorkspaceDatabaseException DB error
+     */
+    public Integer getTotalAvailableMemory(Integer multipleOf)
+    
+            throws WorkspaceDatabaseException;
+    
+    public Integer getTotalPreemptableMemory()
+    
+            throws WorkspaceDatabaseException;   
+    
+    public Integer getUsedNonPreemptableMemory()
+    
+            throws WorkspaceDatabaseException;
+
+    public void addSpotPriceHistory(Calendar timeStamp, 
+                                  Double newPrice)
+    
+            throws WorkspaceDatabaseException;
+
+    public List<SpotPriceEntry> getSpotPriceHistory(Calendar startDate,
+                                                    Calendar endDate)
+                                                  
+            throws WorkspaceDatabaseException;
+    
+    public Double getLastSpotPrice()
+            throws WorkspaceDatabaseException;
+
     boolean updateResourcepoolEntry(String hostname,
                                         String pool,
                                         String networks,
                                         Integer memoryMax,
                                         Integer memoryAvail,
                                         Boolean active)
+            throws WorkspaceDatabaseException;
+
+
+    /**
+     * Returns stored backfill settings from previous launch or null if there was nothing
+     * stored (for example in a clean install).
+     * 
+     * @return stored settings or null
+     * @throws WorkspaceDatabaseException DB error
+     */
+    public Backfill getStoredBackfill() throws WorkspaceDatabaseException;
+
+    /**
+     * @param backfill current backfill settings, may not be null
+     * @throws WorkspaceDatabaseException
+     */
+    public void setBackfill(Backfill backfill) throws WorkspaceDatabaseException;
+
+    /**
+     * Retrieves idempotency reservation
+     * @param creatorId initiating client user
+     * @param clientToken client-provided idempotency token
+     * @return stored reservation, or null of not found
+     * @throws WorkspaceDatabaseException DB error
+     */
+    public IdempotentReservation getIdempotentReservation(String creatorId, String clientToken)
+        throws WorkspaceDatabaseException;
+
+
+    /**
+     * Stores idempotency reservation
+     * @param reservation the reservation to store
+     * @throws WorkspaceDatabaseException DB error
+     */
+    public void addIdempotentReservation(IdempotentReservation reservation)
+        throws WorkspaceDatabaseException;
+
+    /**
+     * Removes existing idempotency reservation
+     * @param creatorId initiating client user
+     * @param clientToken client-provided idempotency token
+     * @throws WorkspaceDatabaseException DB error
+     */
+    public void removeIdempotentReservation(String creatorId, String clientToken)
+        throws WorkspaceDatabaseException;
+
+    public void addAsyncRequest(AsyncRequest asyncRequest)
+        throws WorkspaceDatabaseException;
+
+    public AsyncRequest getAsyncRequest(String id)
+            throws WorkspaceDatabaseException;
+
+    public ArrayList<AsyncRequest> getAllAsyncRequests()
             throws WorkspaceDatabaseException;
 }

@@ -1,11 +1,12 @@
 m4_include(/mcs/m4/worksp.lib.m4)
-_NIMBUS_HEADER(2.6 Zero To Cloud Guide)
+_NIMBUS_HEADER(2.8 Zero To Cloud Guide)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_LEFT2_COLUMN
 _NIMBUS_LEFT2_Z2C_SIDEBAR(y)
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_2_6_DEPRECATED
+_NIMBUS_IS_DEPRECATED
+
 
 
 <h2>Service Installation</h2>
@@ -44,13 +45,13 @@ _NIMBUS_2_6_DEPRECATED
 </p>
 
 <pre class="panel">
-$ wget http://www.nimbusproject.org/downloads/nimbus-2.6RC2-src.tar.gz
+$ wget http://www.nimbusproject.org/downloads/nimbus-iaas-2.8-src.tar.gz
 </pre>
 <pre class="panel">
-$ tar xfz nimbus-2.6RC2-src.tar.gz
+$ tar xfz nimbus-iaas-2.8-src.tar.gz
 </pre>
 <pre class="panel">
-$ cd nimbus-2.6RC2-src/
+$ cd nimbus-2.8-src/
 </pre>
 
 <p>
@@ -207,10 +208,10 @@ cloud properties : /tmp/newuser/cloud.properties
     (version must be >= 16).
 </p>
 <pre class="panel">
-$ wget http://www.nimbusproject.org/downloads/nimbus-cloud-client-017.tar.gz
+$ wget http://www.nimbusproject.org/downloads/nimbus-cloud-client-019.tar.gz
 </pre>
 <pre class="panel">
-$ tar xfz nimbus-cloud-client-017.tar.gz
+$ tar xfz nimbus-cloud-client-019.tar.gz
 </pre>
 
 <p>
@@ -223,7 +224,7 @@ $ tar xfz nimbus-cloud-client-017.tar.gz
     any credentials you already have in <tt class="literal">~/.nimbus/</tt>.
 </p>
 <pre class="panel">
-$ cp /tmp/newuser/cloud.properties nimbus-cloud-client-017/conf/
+$ cp /tmp/newuser/cloud.properties nimbus-cloud-client-019/conf/
 </pre>
 <pre class="panel">
 $ mkdir ~/.nimbus/
@@ -244,7 +245,7 @@ $ cp /tmp/newuser/*.pem ~/.nimbus/
     <tt class="literal">$NIMBUS_HOME/var/ca/trusted-certs/</tt>.
 </p>
 <pre class="panel">
-$ cp $NIMBUS_HOME/var/ca/trusted-certs/* nimbus-cloud-client-017/lib/certs/
+$ cp $NIMBUS_HOME/var/ca/trusted-certs/* nimbus-cloud-client-019/lib/certs/
 </pre>
 
 <a name="try"> </a>
@@ -256,7 +257,7 @@ $ cp $NIMBUS_HOME/var/ca/trusted-certs/* nimbus-cloud-client-017/lib/certs/
     or security problems.
 </p>
 <pre class="panel">
-$ cd nimbus-cloud-client-017/
+$ cd nimbus-cloud-client-019/
 </pre>
 <pre class="panel">
 $ ./bin/cloud-client.sh --status

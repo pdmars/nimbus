@@ -18,25 +18,26 @@ package org.globus.workspace.service.binding.defaults;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.globus.workspace.WorkspaceConstants;
+import org.globus.workspace.WorkspaceException;
+import org.globus.workspace.service.binding.BindCredential;
+import org.globus.workspace.service.binding.BindCustomizations;
+import org.globus.workspace.service.binding.BindDisks;
+import org.globus.workspace.service.binding.BindInitialState;
+import org.globus.workspace.service.binding.BindKernel;
+import org.globus.workspace.service.binding.BindNetwork;
+import org.globus.workspace.service.binding.BindResourceRequest;
+import org.globus.workspace.service.binding.BindSchedule;
+import org.globus.workspace.service.binding.BindShutdownMechanism;
+import org.globus.workspace.service.binding.BindVMM;
+import org.globus.workspace.service.binding.BindingAdapter;
+import org.globus.workspace.service.binding.vm.FileCopyNeed;
+import org.globus.workspace.service.binding.vm.VirtualMachine;
+import org.globus.workspace.service.binding.vm.VirtualMachineDeployment;
 import org.nimbustools.api.repr.CreateRequest;
 import org.nimbustools.api.repr.vm.ResourceAllocation;
 import org.nimbustools.api.services.rm.CreationException;
 import org.nimbustools.api.services.rm.ResourceRequestDeniedException;
-import org.globus.workspace.WorkspaceConstants;
-import org.globus.workspace.WorkspaceException;
-import org.globus.workspace.service.binding.BindInitialState;
-import org.globus.workspace.service.binding.BindSchedule;
-import org.globus.workspace.service.binding.BindShutdownMechanism;
-import org.globus.workspace.service.binding.BindingAdapter;
-import org.globus.workspace.service.binding.BindCustomizations;
-import org.globus.workspace.service.binding.BindKernel;
-import org.globus.workspace.service.binding.BindResourceRequest;
-import org.globus.workspace.service.binding.BindDisks;
-import org.globus.workspace.service.binding.BindVMM;
-import org.globus.workspace.service.binding.BindNetwork;
-import org.globus.workspace.service.binding.vm.CustomizationNeed;
-import org.globus.workspace.service.binding.vm.VirtualMachine;
-import org.globus.workspace.service.binding.vm.VirtualMachineDeployment;
 
 public class DefaultBindingAdapter implements BindingAdapter,
                                               WorkspaceConstants {
@@ -57,6 +58,7 @@ public class DefaultBindingAdapter implements BindingAdapter,
     protected final BindInitialState bindInitialState;
     protected final BindShutdownMechanism bindShutdownMechanism;
     protected final BindCustomizations bindCustomizations;
+    protected final BindCredential bindCredential;
     protected final BindKernel bindKernel;
     protected final BindResourceRequest bindResourceRequest;
     protected final BindDisks bindDisks;
@@ -72,6 +74,7 @@ public class DefaultBindingAdapter implements BindingAdapter,
                                  BindInitialState bindInitialStateImpl,
                                  BindShutdownMechanism bindShutdownImpl,
                                  BindCustomizations bindCustomizationsImpl,
+                                 BindCredential bindCredentialImpl,
                                  BindKernel bindKernelImpl,
                                  BindDisks bindDisksImpl,
                                  BindResourceRequest bindResourceRequestImpl,
@@ -97,6 +100,11 @@ public class DefaultBindingAdapter implements BindingAdapter,
             throw new IllegalArgumentException("bindCustomizationsImpl may not be null");
         }
         this.bindCustomizations = bindCustomizationsImpl;
+
+        if (bindCredentialImpl == null) {
+            throw new IllegalArgumentException("bindCredentialImpl may not be null");
+        }
+        this.bindCredential = bindCredentialImpl;
 
         if (bindKernelImpl == null) {
             throw new IllegalArgumentException("bindKernelImpl may not be null");
@@ -147,6 +155,8 @@ public class DefaultBindingAdapter implements BindingAdapter,
         
         final String name = req.getName();
         vm.setName(name);
+        
+        vm.setPreemptable(req.getRequestedRA().isSpotInstance());
 
         if (numNodes > 1) {
             logger.debug("binding " + numNodes + " virtual machines: " + name);
@@ -157,6 +167,7 @@ public class DefaultBindingAdapter implements BindingAdapter,
         final VirtualMachineDeployment dep = new VirtualMachineDeployment();
         vm.setDeployment(dep);
 
+        this.bindNetwork.neededAllocations(vm, req.getRequestedNics());
         this.bindSchedule.consume(dep, req.getRequestedSchedule());
         this.bindInitialState.consume(vm, req.getInitialStateRequest());
         this.bindShutdownMechanism.consume(dep, req.getShutdownType());
@@ -165,6 +176,7 @@ public class DefaultBindingAdapter implements BindingAdapter,
         this.bindResourceRequest.consume(dep, req.getRequestedRA());
         this.bindVMM.consume(vm, req.getRequiredVMM());
         this.bindCustomizations.consume(vm, req.getCustomizationRequests());
+        this.bindCredential.consume(vm, req.getCredential());
 
         // all in group get the same data
         if (req.getMdUserData() != null) {
@@ -179,7 +191,6 @@ public class DefaultBindingAdapter implements BindingAdapter,
                 throw new CreationException(e.getMessage(), e);
             }
         }
-        this.bindNetwork.consume(vms, req.getRequestedNics());
         
         return vms;
     }
@@ -191,12 +202,12 @@ public class DefaultBindingAdapter implements BindingAdapter,
     
     public void backOutAllocations(VirtualMachine vm)
             throws WorkspaceException {
-        this.bindNetwork.backOutIPAllocations(vm);
+        //this.bindNetwork.backOutIPAllocations(vm);
     }
 
     public void backOutAllocations(VirtualMachine[] vms)
             throws WorkspaceException {
-        this.bindNetwork.backOutIPAllocations(vms);
+        //this.bindNetwork.backOutIPAllocations(vms);
     }
 
 
@@ -204,12 +215,12 @@ public class DefaultBindingAdapter implements BindingAdapter,
     // OTHER
     // -------------------------------------------------------------------------
     
-    public CustomizationNeed newCustomizationNeed(String srcContent,
+    public FileCopyNeed newFileCopyNeed(String srcContent,
                                                   String dstPath)
                 throws WorkspaceException {
 
         return this.bindCustomizations
-                        .newCustomizationNeedImpl(srcContent, dstPath);
+                        .newFileCopyNeedImpl(srcContent, dstPath);
     }
 
 }

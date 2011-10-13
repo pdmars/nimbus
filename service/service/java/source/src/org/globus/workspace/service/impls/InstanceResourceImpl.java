@@ -26,12 +26,13 @@ import org.globus.workspace.accounting.AccountingEventAdapter;
 import org.globus.workspace.persistence.DataConvert;
 import org.globus.workspace.persistence.PersistenceAdapter;
 import org.globus.workspace.service.InstanceResource;
+import org.globus.workspace.service.binding.BindNetwork;
 import org.globus.workspace.service.binding.BindingAdapter;
 import org.globus.workspace.service.binding.GlobalPolicies;
 import org.globus.workspace.service.binding.authorization.CreationAuthorizationCallout;
 import org.globus.workspace.service.binding.authorization.Decision;
 import org.globus.workspace.service.binding.authorization.PostTaskAuthorization;
-import org.globus.workspace.service.binding.vm.CustomizationNeed;
+import org.globus.workspace.service.binding.vm.FileCopyNeed;
 import org.globus.workspace.service.binding.vm.VirtualMachine;
 
 import org.nimbustools.api.repr.ShutdownTasks;
@@ -71,6 +72,7 @@ public abstract class InstanceResourceImpl implements InstanceResource {
 
     protected final PersistenceAdapter persistence;
     protected final BindingAdapter binding;
+    protected final BindNetwork bindNetwork;
     protected final GlobalPolicies globals;
     protected final DataConvert dataConvert;
     protected final Lager lager;
@@ -105,9 +107,11 @@ public abstract class InstanceResourceImpl implements InstanceResource {
     // currently, mgmt policy limited to one entity, the create() caller
     protected String creatorID;
 
-    private boolean removeTriggered;
+    protected String clientToken;
 
+    protected double chargeRatio = 1.0;
 
+    
     // -------------------------------------------------------------------------
     // CONSTRUCTOR
     // -------------------------------------------------------------------------
@@ -116,7 +120,8 @@ public abstract class InstanceResourceImpl implements InstanceResource {
                                    BindingAdapter bindingImpl,
                                    GlobalPolicies globalsImpl,
                                    DataConvert dataConvertImpl,
-                                   Lager lagerImpl) {
+                                   Lager lagerImpl,
+                                   BindNetwork bindNetworkImpl) {
 
         if (lagerImpl == null) {
             throw new IllegalArgumentException("lagerImpl may not be null");
@@ -143,6 +148,11 @@ public abstract class InstanceResourceImpl implements InstanceResource {
             throw new IllegalArgumentException("da may not be null");
         }
         this.dataConvert = dataConvertImpl;
+        
+        if (bindNetworkImpl == null) {
+            throw new IllegalArgumentException("bindNetworkImpl may not be null");
+        }
+        this.bindNetwork = bindNetworkImpl;         
     }
 
 
@@ -180,13 +190,15 @@ public abstract class InstanceResourceImpl implements InstanceResource {
      * @param termTime resource destruction time, can be null which mean either
      *                 "never" or "no setting" (while using best-effort sched)
      * @param node assigned node, can be null
+     * @param chargeRatio ratio to compute the real minutes charge, typically <= 1.0 and > 0
      * @throws CreationException problem
      */
     public void populate(int id,
                          VirtualMachine vm,
                          Calendar startTime,
                          Calendar termTime,
-                         String node) throws CreationException {
+                         String node,
+                         double chargeRatio) throws CreationException {
 
         if (vm == null) {
             throw new CreationException("null vm");
@@ -198,6 +210,7 @@ public abstract class InstanceResourceImpl implements InstanceResource {
 
         this.id = id;
         this.vm = vm;
+        this.chargeRatio = chargeRatio;
 
         // could be null if best effort, infinite for timebeing
         this.terminationTime = termTime;
@@ -288,6 +301,25 @@ public abstract class InstanceResourceImpl implements InstanceResource {
         this.creatorID = ID;
     }
 
+    public String getClientToken() {
+        return clientToken;
+    }
+
+    public void setClientToken(String clientToken) {
+        this.clientToken = clientToken;
+    }
+
+    public void setChargeRatio(double chargeRatio) {
+        if (chargeRatio < 0) {
+            throw new IllegalArgumentException("charge ratio can not be < 0");
+        }
+        this.chargeRatio = chargeRatio;
+    }
+
+    public double getChargeRatio() {
+        return this.chargeRatio;
+    }
+
     public VirtualMachine getVM() {
         return this.vm;
     }
@@ -321,11 +353,11 @@ public abstract class InstanceResourceImpl implements InstanceResource {
         this.vmmAccessOK = accessOK;
     }
 
-    public synchronized void newCustomizationNeed(CustomizationNeed need) {
+    public synchronized void newFileCopyNeed(FileCopyNeed need) {
         if (this.vm == null) {
             throw new IllegalStateException("vm is null");
         }
-        this.vm.addCustomizationNeed(need);
+        this.vm.addFileCopyNeed(need);
         try {
             this.persistence.addCustomizationNeed(this.id, need);
         } catch (ManageException e) {
@@ -725,15 +757,10 @@ public abstract class InstanceResourceImpl implements InstanceResource {
      * Don't call unless you are managing the instance cache (or not using
      * one, perhaps).
      *
+     * @return true if remove succeeded
      * @throws ManageException problem with removal
      */
-    public synchronized void remove() throws ManageException {
-
-        if (this.removeTriggered) {
-            return; // *** EARLY RETURN ***
-        } else {
-            this.removeTriggered = true;
-        }
+    public synchronized boolean remove() throws ManageException {
 
         if (this.lager.eventLog || this.lager.traceLog) {
             if (this.lager.eventLog) {
@@ -744,6 +771,10 @@ public abstract class InstanceResourceImpl implements InstanceResource {
         }
 
         this.setTargetState(WorkspaceConstants.STATE_DESTROYING);
+        if (this.getState() != WorkspaceConstants.STATE_DESTROY_SUCCEEDED) {
+            logger.debug(Lager.id(this.id) + " destroy failed (state " + this.getState() + ")");
+            return false;
+        }
 
         if (this.lager.eventLog) {
             logger.info(Lager.ev(this.id) +
@@ -755,6 +786,7 @@ public abstract class InstanceResourceImpl implements InstanceResource {
 
         // inform any destruction listeners:
         this.resourceDestroyed();
+        return true;
     }
 
     protected void do_remove() {
@@ -791,7 +823,8 @@ public abstract class InstanceResourceImpl implements InstanceResource {
 
                 this.accounting.destroy(this.id,
                                         this.getCreatorID(),
-                                        0L);
+                                        0L,
+                                        this.chargeRatio);
             } else {
                 final long runningTimeMS =
                         Calendar.getInstance().getTimeInMillis() -
@@ -805,13 +838,15 @@ public abstract class InstanceResourceImpl implements InstanceResource {
 
                 this.accounting.destroy(this.id,
                                         this.getCreatorID(),
-                                        runningTime);
+                                        runningTime,
+                                        this.chargeRatio);
             }
         }
 
         try {
             logger.debug("backing out allocations for " + Lager.id(this.id));
-            this.binding.backOutAllocations(this.vm);
+            this.bindNetwork.backOutIPAllocations(vm);
+            //this.binding.backOutAllocations(this.vm);
         } catch (WorkspaceException e) {
             // candidate for admin log/trigger of severe issues
             final String err = "error retiring allocations, " +

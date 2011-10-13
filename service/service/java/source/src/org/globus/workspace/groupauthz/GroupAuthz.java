@@ -17,7 +17,6 @@
 package org.globus.workspace.groupauthz;
 
 import org.globus.workspace.service.binding.authorization.CreationAuthorizationCallout;
-import org.globus.workspace.service.binding.authorization.Decision;
 import org.globus.workspace.service.binding.authorization.PostTaskAuthorization;
 import org.globus.workspace.service.binding.vm.VirtualMachine;
 import org.nimbustools.api.services.rm.AuthorizationException;
@@ -298,7 +297,8 @@ public class GroupAuthz implements CreationAuthorizationCallout,
                                Subject subject,
                                Long elapsedMins,
                                Long reservedMins,
-                               int numWorkspaces)
+                               int numWorkspaces,
+                               double chargeRatio)
 
             throws AuthorizationException,
                    ResourceRequestDeniedException {
@@ -328,7 +328,8 @@ public class GroupAuthz implements CreationAuthorizationCallout,
                                             bindings,
                                             elapsedMins,
                                             reservedMins,
-                                            numWorkspaces);
+                                            numWorkspaces,
+                                            chargeRatio);
             }
         }
 
@@ -367,6 +368,29 @@ public class GroupAuthz implements CreationAuthorizationCallout,
 
         // administrator put DN in grid-mapfile but not in a group...
         throw new AuthorizationException(NO_POLICIES_MESSAGE);
+    }
+
+    public String getGroupName(String caller) {
+
+
+        for (int i = 0; i < this.groups.length; i++) {
+
+            final GroupRights rights = getRights(caller, this.groups[i]);
+            // only first inclusion of DN is considered
+            if (rights != null) {
+                return this.groups[i].getName();
+            }
+        }
+
+        return null;
+    }
+
+    public int getGroupIDFromCaller(String caller) {
+        for(int i = 0; i < this.groups.length; i++) {
+            if(groups[i].hasDN(caller))
+                return ++i;
+        }
+        return 0;
     }
 
 

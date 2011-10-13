@@ -7,17 +7,501 @@ _NIMBUS_LEFT2_ABOUT_SIDEBAR(n,n,n,y)
 
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_2_6_DEPRECATED
+_NIMBUS_IS_DEPRECATED
 
-<h2>Changelog</h2>
+
+<h2>Nimbus Infrastructure Changelog</h2>
 
 <p>For cloud client changes, see
 <a href="http://github.com/nimbusproject/nimbus/raw/master/cloud-client/nimbus-cloud-client-src/CHANGES.txt">here.</a>
 </p>
 
-<a name="2.6"> </a>
+<a name="2.8"> </a>
 
-<i>2.6RC2 - Summary</i>
+<i>2.8 - Summary</i>
+<ul>
+    <li>
+        <p>
+            This release contains many important bug fixes as well as some new features.
+        </p>
+    </li>
+    <li>
+        <p>
+Propagation by means of a file system copy: this can greatly decrease the boot time of VMs on systems where a fast shared file system exists.  
+        </p>
+    </li>
+    <li>
+        <p>
+VM image caching: this will greatly increase the boot performance for clouds with a base image that is launched often (a common use case).  This works with any propagation method.
+        </p>
+    </li>
+    <li>
+        <p>
+            libvirt template support added.  A cloud administrator can
+            now completely control the options sent to libvirt when starting
+            a virtual machine by editing the template file
+        </p>
+    </li>
+    <li>
+        <p>
+            ImportKeyPair is implemented in the EC2 protocols (details below).
+        </p>
+    </li>
+</ul>
+
+<i>2.8 - IaaS Services</i>
+<ul>
+    <li>
+        <p>
+        Internally the Nimbus team has introduced a build and test system
+        with <a href="http://build.nimbusproject.org">Jenkins</a>.
+            This has helped us create a more robust and
+        well tested system as well as making it easier for the community
+        to make contributions.
+        </p>
+    </li>
+    <li>
+        <p>
+            The Nimbus Context Broker has been factored out into a separate tarball install
+            in addition to being part of the default IaaS installation.
+        </p>
+    </li>
+    <li>
+        <p>
+            Implemented EC2 ImportKeyPair operation. The old CreateKeyPair behavior is disabled (the behavior of allowing a "||" token based import mechanism with CreateKeyPair).
+        </p>
+        <p>
+            EC2 used to only have CreateKeyPair, now the EC2 protocols in Nimbus IaaS use ImportKeyPair and CreateKeyPair as intended as operations.  The old behavior can be enabled if the administrator wants.  (<a href="https://github.com/nimbusproject/nimbus/issues/36">enhancement 36</a>).
+        </p>
+    </li>
+    <li>
+        <p>
+            Documentation added to the <a href="http://www.nimbusproject.org/docs/latest/admin/z2c/">zero to cloud guide</a> describing
+            how to setup Nimbus to work with KVM.
+        </p>
+    </li>
+    <li>
+        <p>
+            <i>Bug Fixes</i>
+        </p>
+
+        <ul>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/59">ehcache unreliable for critical persistence</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/56">Termination should be retried if there is a fatal issue</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/49">accounting txt file not updated when corrupt VMs expire.</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/48">Add HTTPS unpropagation support.</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/46">Incorrect in_use in nimbus-nodes -l</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/44">User tools have buggy group-authz dir loading</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/37">Needed networks not being respected</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/63">New VM name was limited to a length which was too short in some circumstances</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/59">ehcache unreliable for critical persistence</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/67">Object copy with JetS3t fails</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/52">typica now works with Nimbus Query interface</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/56">Termination is retried if there is a fatal issue</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/65">Safer handling of the gridmap file</a>
+                </p>
+            </li>
+        </ul>
+    </li>
+</ul>
+
+<i>2.8 - LANTorrent</i>
+<ul>
+    <li>
+        <p>
+            In this release LANTorrent was repackaged for more pythonic
+            distribution mechanisms and an important bug was fixed that
+            caused long term stability problems.
+        </p>
+    </li>
+    <li>
+        <p>
+            <i>Bug Fixes</i>
+        </p>
+        <ul>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/70">Wrong HOME environment variable in LANTorrent's xinetd configuration</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/68">Bugs in the LANTorrent client object fixed.  Transfers are more stable.</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/39">Lantorrent runaway after killing a newly created VM</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/57">LANTorrent can't be installed without an Internet connection</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/51">Add lantorrent tests to test suite.</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/32">Pilot updates</a>
+                </p>
+            </li>
+        </ul>
+    </li>
+</ul>
+
+<i>2.8 - Control Agents</i>
+
+<ul>
+    <li>
+        <p>
+            libvirt template support added.  A cloud administrator can
+            now completely control the options sent to libvirt when starting
+            a virtual machine by editing the template file
+            <tt class="literal">/opt/nimbus/etc/workspace-control/libvirt_template.xml</tt>
+            on the VMM nodes.
+        </p>
+    </li>
+    <li>
+        <p>
+        A cache of propagated images can now be kept on each VMM.  Before
+        an image is propagated the cache is checked for an image with a
+        matching checksum.  If found that image is used and no propagation
+        is needed which can save a significant amount of time.  This will
+        work with any propagation mechanism.
+        </p>
+    </li>
+    <li>
+        <p>
+        The cp (copy) propagation driver has been introduced in this release.
+        This prepares an image for use by a VMM by copying it directly out
+        of the Cumulus data store and into a temporary location from which it
+        will be booted.  For users with shared fast file systems this can
+        bring great performance benefits.
+        </p>
+    </li>
+    <li>
+        <p>
+            <i>Bug Fixes</i>
+        </p>
+
+        <ul>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/33">virtio support in generated libvirt xml</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/55">Workspace control verifies old unpropagation URL when saving with a new name</a>
+                </p>
+            </li>
+        </ul>
+    </li>
+</ul>
+
+<i>2.8 - Additional Notes</i>
+<ul>
+    <li>
+        <p>
+            List of
+            <a href="http://github.com/nimbusproject/nimbus/compare/nimbus-release-2.7...nimbus-release-2.8">all
+            commits</a>
+            between Nimbus 2.7 final and Nimbus 2.8 final.
+        </p>
+    </li>
+</ul>
+
+
+<a name="2.7"> </a>
+<br><hr><br>
+
+<i>2.7 - Summary</i>
+<ul>
+    <li>
+        <p>
+            Support for backfill and spot VM instances was introduced. Backfill instances are configured by the
+            administrator and automatically start on idle resources. When user requests are received, backfill
+            instances are preempted and terminated.
+        </p>
+        <p>
+            Spot instances are similar to backfill, but are initiated by the user. Users may "bid" on VM slots and
+            compete for available resources. Like backfill, spot instances can be preempted and terminated at any
+            time. Preemption occurs when either a real (non-spot) request or a spot request with a higher bid is
+            received and no other resources are available.
+        </p>
+    </li>
+    <li>
+        <p>
+            The EC2 Query interface has substantially improved compatibility with EC2 clients. The generated XML
+            is now largely identical.
+        </p>
+    </li>
+    <li>
+        <p>
+            Idempotent instance creation is now supported, via the EC2 interfaces.
+        </p>
+    </li>
+    <li>
+        <p>
+            There are also numerous bug fixes and minor enhancements.
+        </p>
+    </li>
+</ul>
+
+<i>2.7 - IaaS Services</i>
+<ul>
+    <li>
+        <p>
+            Support for backfill and spot VM instances was introduced.
+            See the <a href="admin/reference.html#backfill-and-spot-instances">documentation</a> for more information.
+        </p>
+    </li>
+    <li>
+        <p>
+            Idempotent instance creation is now supported, via the EC2 interfaces.
+        </p>
+    </li>
+    <li>
+        <p>
+            The metadata server now supports listening on multiple network interfaces. The URL provided to
+            VMs can be configured based on the requested networks.
+        </p>
+    </li>
+    <li>
+        <p>
+            The EC2 Query interface has substantially improved compatibility with EC2 clients. The generated XML
+            is now largely identical. The name space version in responses matches the request version
+            regardless of the actual version. Additionally, version 1 signatures are now supported, to enable
+            some clients that never updated to version 2.
+        </p>
+    </li>
+    <li>
+        <p>
+            The <tt class="literal">scripts/check-dependencies.sh</tt> program has been added to the services
+            installer to help detect dependency problems before starting the installation process.
+        </p>
+    </li>
+    <li>
+        <p>
+            Added support for specifying multiple CPU architectures in <tt class="literal">vmm.conf</tt>. Detailed in
+<a href="https://github.com/nimbusproject/nimbus/issues/closed#issue/15">issue 15</a>.
+</p>
+</li>
+<li>
+<p>
+    <i>Bug Fixes</i>
+</p>
+
+<ul>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed#issue/27">Fixed bug with user-selected kernels in workspace-control</a>
+                </p>
+            </li>
+
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/issue/25">Fixed bug in nimbus-edit-user regarding group management</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed#issue/7">Fix unpropagation exception in lantorrent</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/9">Allow metadata server queries to use "/latest/"</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/10">nimbus-remove-user --help dumps stack</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/13">Installer broken with Python 2.7.1</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/17">Nimbus EC2 Query interface should support signature version 1</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/19">Query interface generated XML isn't identical (enough) to EC2</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/20">nimbus-reset-state not sourcing virtual env</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/21">EC2 query interface parameter lists break on POST requests</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/22">cache mechanism not surviving restarts</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://bugzilla.mcs.anl.gov/globus/show_bug.cgi?id=7097">nimbus-new-user doesn't accept relative paths</a>
+                </p>
+            </li>
+        </ul>
+    </li>
+</ul>
+
+<i>2.7 - LANTorrent</i>
+<ul>
+    <li>
+        <p>
+            Improved logging output.
+        </p>
+    </li>
+    <li>
+        <p>
+            Added checksum checks to the data as it is streaming.  Peers report back their values and errors are
+            thrown for all non-matching cases.
+        </p>
+    </li>
+    <li>
+        <p>
+            Altered the use of nonblocking sockets to have a more efficient process.
+        </p>
+    </li>
+    <li>
+        <p>
+            <i>Bug Fixes</i>
+        </p>
+        <ul>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed#issue/24">LANTorrent transfers don't correctly check the result of send()</a>
+                </p>
+            </li>
+        </ul>
+    </li>
+</ul>
+
+<i>2.7 - Control Agents</i>
+<ul>
+    <li>
+        <p>
+            Added support for propagation from an HTTPS server with X509 proxy authentication. See
+            <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/12">issue 12</a> for
+            details.
+        </p>
+
+    </li>
+    <li>
+        <p>
+            <i>Bug Fixes</i>
+        </p>
+
+        <ul>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/18">mount-alter.sh terminating without umount</a>
+                </p>
+            </li>
+            <li>
+
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed/#issue/14">Add Locking to workspace pilot</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/closed#issue/23">Gzipped images cannot be restarted</a>
+                </p>
+            </li>
+            <li>
+                <p>
+                    <a href="https://github.com/nimbusproject/nimbus/issues/issue/27">User-selected kernels broken in workspace-control</a>
+                </p>
+            </li>
+        </ul>
+    </li>
+</ul>
+
+<i>2.7 - Additional Notes</i>
+<ul>
+    <li>
+        <p>
+            List of
+            <a href="http://github.com/nimbusproject/nimbus/compare/nimbus-release-2.6...nimbus-release-2.7">all
+            commits</a>
+            between Nimbus 2.6 final and Nimbus 2.7 final.
+        </p>
+    </li>
+</ul>
+
+
+<a name="2.6"> </a>
+<br><hr><br>
+
+<i>2.6 - Summary</i>
 <ul>
     <li>
         <p>
@@ -61,7 +545,7 @@ _NIMBUS_2_6_DEPRECATED
     </li>
 </ul>
 
-<i>2.6RC2 - Installer</i>
+<i>2.6 - Installer</i>
 <ul>
     <li>
         <p>
@@ -79,7 +563,7 @@ _NIMBUS_2_6_DEPRECATED
     </li>
 </ul>
 
-<i>2.6RC2 - IaaS Services</i>
+<i>2.6 - IaaS Services</i>
 <ul>
     <li>
         <p>
@@ -159,7 +643,7 @@ _NIMBUS_2_6_DEPRECATED
     </li>
 </ul>    
 
-<i>2.6RC2 - Cumulus</i>
+<i>2.6 - Cumulus</i>
 <ul>
     <li>
         <p>
@@ -178,7 +662,7 @@ _NIMBUS_2_6_DEPRECATED
             <i>Redirection</i>
         </p>
         <p>
-            In order to make Cumulus a scalabile service we added a feature
+            In order to make Cumulus a scalable service we added a feature
             which takes advantage of the temporary redirection in error in
             the
             <a href="http://docs.amazonwebservices.com/AmazonS3/latest/index.html">Amazon S3 Protocol</a>.  A Cumulus administrator can create a text file 
@@ -214,7 +698,7 @@ _NIMBUS_2_6_DEPRECATED
     </ul>
 </ul>
 
-<i>2.6RC2 - LANTorrent</i>
+<i>2.6 - LANTorrent</i>
 <ul>
     <li>
         <p>
@@ -235,7 +719,7 @@ _NIMBUS_2_6_DEPRECATED
     </li>
 </ul>
 
-<i>2.6RC2 - Context Broker</i>
+<i>2.6 - Context Broker</i>
 <ul>
     <li>
         <p>
@@ -252,7 +736,7 @@ _NIMBUS_2_6_DEPRECATED
     </li>
 </ul>
 
-<i>2.6RC2 - Control Agents</i>
+<i>2.6 - Control Agents</i>
 <ul>
     <li>
         Support for LANTorrent (see above).  The relevant configurations are
@@ -272,7 +756,7 @@ _NIMBUS_2_6_DEPRECATED
     </li>
 </ul>
 
-<i>2.6RC2 - Cloud Client</i>
+<i>2.6 - Cloud Client</i>
 <ul>
     <li>
         <p>
@@ -287,14 +771,14 @@ _NIMBUS_2_6_DEPRECATED
     </li>
 </ul>
 
-<i>2.6RC2 - Additional Notes</i>
+<i>2.6 - Additional Notes</i>
 <ul>
     <li>
         <p>
             List of
-            <a href="http://github.com/nimbusproject/nimbus/compare/nimbus-release-2.5...HEAD">all
+            <a href="http://github.com/nimbusproject/nimbus/compare/nimbus-release-2.5...nimbus-release-2.6">all
             commits</a>
-            between Nimbus 2.5 final and the current 2.6 development branch.
+            between Nimbus 2.5 final and 2.6 final.
         </p>
     </li>
     <li>

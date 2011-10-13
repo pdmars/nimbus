@@ -15,8 +15,6 @@ from nimbusweb.setup import autoca
 import string
 import random
 import os
-import sys
-import sys
 import ConfigParser
 from ConfigParser import SafeConfigParser
 import time
@@ -33,6 +31,7 @@ import shlex
 from nimbusweb.setup.setuperrors import *
 from nimbusweb.setup.groupauthz import *
 from optparse import SUPPRESS_HELP
+import shutil
 
 g_report_options = ["cert", "key", "dn", "canonical_id", "access_id", "access_secret", "url", "web_id", "cloud_properties"]
 
@@ -93,8 +92,7 @@ def remove_gridmap(dn):
         print "WARNING! user not found in %s" % (dn)
     os.close(nf)
     f.close()
-    os.unlink(gmf)
-    os.rename(new_name, gmf)
+    shutil.move(new_name, gmf)
 
 def generate_cert(o):
     nimbus_home = get_nimbus_home()
@@ -239,6 +237,7 @@ Create/edit a nimbus user
         nh = get_nimbus_home() + "/var/ca/"
         o.dest = tempfile.mkdtemp(suffix='cert', prefix='tmp', dir=nh)
     else:
+        o.dest = os.path.abspath(o.dest)
         try:
             os.mkdir(o.dest)
         except:

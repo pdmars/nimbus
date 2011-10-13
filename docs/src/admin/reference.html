@@ -1,13 +1,14 @@
 m4_include(/mcs/m4/worksp.lib.m4)
-_NIMBUS_HEADER(2.6 Admin Reference)
+_NIMBUS_HEADER(2.8 Admin Reference)
 _NIMBUS_HEADER2(n,n,y,n,n,n,n)
 _NIMBUS_LEFT2_COLUMN
 _NIMBUS_LEFT2_ADMIN_SIDEBAR(n,n,y,n,n)
 _NIMBUS_LEFT2_COLUMN_END
 _NIMBUS_CENTER2_COLUMN
-_NIMBUS_2_6_DEPRECATED
+_NIMBUS_IS_DEPRECATED
 
-<h2>Nimbus 2.6RC2 Admin Reference</h2>
+
+<h2>Nimbus 2.8 Admin Reference</h2>
 
 <p>
     This section explains some side tasks as well as some
@@ -157,6 +158,64 @@ _NIMBUS_2_6_DEPRECATED
             </li>
         </ul>
     </li>
+    
+    <li>
+        <p>
+            <a href="#backfill-and-spot-instances">Backfill and spot instances</a>
+        </p>
+    </li>
+    <li>
+        <p>
+            <a href="#libvirttemplate">libvirt template and virtio</a>
+        </p>
+    </li>
+
+    <li>
+        <p>
+            <a href="#cpprop">Copy Propagation</a>
+        </p>
+        <ul>
+            <li>
+                <a href="#cpprop-config">Configuration</a>
+            </li>
+            <li>
+                <a href="#cpprop-passthrough">Copy Propagation Pass Through</a>
+            </li>
+        </ul>
+    </li>
+
+    <li>
+        <p>
+            <a href="#imagecache">Image Cache</a>
+        </p>
+        <ul>
+            <li>
+                <a href="#imagecache-config">Configuration</a>
+            </li>
+        </ul>
+
+    </li>
+
+	<li>
+		<p>
+			<a href="#nimbusadministration">Nimbus Administration Tools</a>
+		</p>
+		<ul>
+			<li>
+				<a href="#nimbus-admin">nimbus-admin</a>
+			</li>
+			<li>
+				<a href="#nimbus-nodes">nimbus-nodes</a>
+			</li>
+			<li>
+				<a href="#gen-opts">General Options</a>
+			</li>
+			<li>
+				<a href="#output-opts">Output Options</a>
+			</li>
+		</ul>
+	</li>
+
 
 
 
@@ -208,7 +267,7 @@ _NIMBUS_2_6_DEPRECATED
 </p>
 
 <p>
-    In the Nimbus 2.6RC2 release the repository service (<a href="#cumulus">Cumulus</a>) and the IaaS services
+    In the Nimbus 2.6 release the repository service (<a href="#cumulus">Cumulus</a>) and the IaaS services
     MUST be on the same node.  In future releases this restriction will
     be lifted.
 </p>
@@ -931,6 +990,16 @@ _EXAMPLE_CMD_END
     Container restart required after the configuration change.
 </p>
 
+<div class="note">
+<p class="note-title">KVM</p>
+    If you are using KVM you need to adjust the default mountpoint, to support disk images.
+    This is found in
+    <tt class="literal">$NIMBUS_HOME/services/etc/nimbus/elastic/other/other-elastic.conf</tt>.
+    Set <tt class="literal">rootfile.mountas=hda</tt>
+</p>
+</div>
+
+
 <!-- *********************************************************************** -->
 <!-- *********************************************************************** -->
 <!-- *********************************************************************** -->
@@ -1025,6 +1094,15 @@ hostname = &lt;hostname&gt;
     to change the value <tt class="literal">vws.repository=&lt;hostname&gt;:&lt;port&gt;</tt>
     in their local cloud.properties file.
 
+</p>
+
+<h3>Nimbus Context Broker REST frontend (default 8446</h3>
+<p>
+    The context broker also has a RESTful HTTP interface which listens on a separate port.
+    You can disable or change the port of this interface in a configuration file:
+    <tt class="literal">$NIMBUS_HOME/services/etc/nimbus-context-broker/jndi-config.xml</tt>.
+    Parameters under the <tt class="literal">rest</tt> resource control this interface.
+    Restart the service for changes to take effect.
 </p>
 
 <h3>Nimbus Web application (default 1443)</h3>
@@ -1324,6 +1402,10 @@ fakepub1 192.168.0.3 192.168.0.1 192.168.0.255 255.255.255.0</pre>
 <p>
     The "resource pool" mode is where the service has direct control of a pool
     of VMM nodes.  The service assumes it can start VMs 
+</p>
+<p>
+	These are explained below.  To learn about backfill and spot instances, see
+	<a href="#backfill-and-spot-instances">backfill and spot instances overview</a>
 </p>
 <p>
     The "pilot" mode is where the service makes a request to a cluster's
@@ -1823,7 +1905,7 @@ DHCPD_START="/etc/init.d/dhcpd start"
 <p>
     If you want to install the broker separately from Nimbus, download the 
     Nimbus source tarball, extract it, and run 
-    <i>scripts/broker-build-and-install.sh</i> with an appropriate 
+    <i>scripts/gt/broker-build-and-install.sh</i> with an appropriate 
     <b>$GLOBUS_LOCATION</b> set.
 </p>
 <p>
@@ -2107,93 +2189,513 @@ additional steps are required to enable it.
 <p>
 The following software is required on both service and VMM nodes:
     <ol>
-        <li>python2.4</li>
-        <li>python simplejson</li>
+        <li>Python 2.5+ (but not Python 3.x)</li>
+        <li>Python <tt class="literal">simplejson</tt> module</li>
     </ol>
 </p>
 
 <p>
-Lantorrent is run out of xinetd thus it must also be installed on all VMMs.
+Lantorrent is run out of <tt class="literal">xinetd</tt> thus it must also be installed on all VMMs.
 </p>
 
 <p>
 To install LANTorrent you must take the following steps:
 
 <ol>
-<li>edit $NIMBUS_HOME/nimbus-setup.conf</li>
-    change lantorrent.enabled: False -&gt; lantorrent.enabled: True
+<li>
+    <p>
+        Edit <tt class="literal">$NIMBUS_HOME/nimbus-setup.conf</tt> and enable LANTorrent:
+    </p>
+    <pre class="panel">lantorrent.enabled: True</pre>
+</li>
 
-<li>edit $NIMBUS_HOME/services/etc/nimbus/workspace-service/other/common.conf</li>
-    change the value of propagate.extraargs:
-    propagate.extraargs=$NIMBUS_HOME/lantorrent/bin/lt-request
-    <br />
-    be sure to expand $NIMBUS_HOME to its full and actual path.
+<li>
+    <p>
+        Edit <tt class="literal">$NIMBUS_HOME/services/etc/nimbus/workspace-service/other/common.conf</tt>
+        and change the value of <tt class="literal">propagate.extraargs</tt>:
+    </p>
+    <pre class="panel">propagate.extraargs=$NIMBUS_HOME/lantorrent/bin/lt-request.sh</pre>
 
-<li>install lantorrent on VMM</li>
+    <p>
+    Be sure to expand <tt class="literal">$NIMBUS_HOME</tt> to its full and actual path.
+    </p>
+</li>
+
+<li>
+    <p>Install LANTorrent on VMM</p>
     <ul>
-        <li>recursively copy $NIMBUS_HOME/lantorrent to /opt/nimbus/lantorrent.</li>
-        <li>run ./vmm-install.sh on each node</li>
-            either run it as your workspace control user or specify the workspace
-            control user as the first and only argument to the script.
+        <li>Copy lantorrent to the VMM nodes</li>
+            From the source distribution of Nimbus copy the lantorrent
+            directory to all VMM nodes.  
+        <li>optional: You may want to setup a python virtual environment for the installation</li>
+            To do this, run <tt class="literal">virtualenv /path_to_install_lantorrent</tt>.
+            Then, use the <tt class="literal">/path_to_install_lantorrent/bin/python</tt> binary instead of your system python.
+        <li>optional: If you don't have Internet connectivity on the VMM, you
+        will have to manually install the simplejson library from source (in the
+        virtual env if you chose to create one).</li>
+        <li>Run <tt class="literal">python setup-vmm.py install</tt> on each node.
+            This will output the xinetd file that you will need to install
+            into <tt class="literal">/etc/xinetd.d</tt>.  Note the <i>user</i> value in the output:
+            this should be the same user as your workspace control user.
+        </li>
     </ul>
+</li>
 
-<li>install LANTorrent into xinetd</li>
-    the vmm-install.sh script creates the file lantorrent.  This
-    file is ready to be copied into /etc/xinetd.d/.  Once this is done
-    restart xinetd (/etc/init.d/xinetd restart).
-
-<li>change the propagation method.</li>
-    edit the file:
-        <BR>
-        $NIMBUS_HOME/services/etc/nimbus/workspace-service/other/authz-callout-ACTIVE.xml
-
+<li>
+    <p>Install LANTorrent into xinetd</p>
+    <p>
+    The <tt class="literal">setup-vmm.py</tt> script outputs the need xinetd <tt class="literal">lantorrent</tt> file.  For example:
+    <pre class="panel">
+    ============== START WITH THE NEXT LINE ==================
+    service lantorrent
+    {
+        type        = UNLISTED
+        disable     = no
+        socket_type = stream
+        protocol    = tcp
+        user        = bresnaha
+        wait        = no
+        port        = 2893
+        server      = /home/bresnaha/lt1/bin/ltserver
+    }                                                                            
+    =============== END WITH THE PREVIOUS LINE =================
+    </pre>
+    This output must be copied into <tt class="literal">/etc/xinetd.d/lantorrent</tt>.  Once done,
+    restart xinetd.
+    </p>
+     <pre class="panel">
+     # /etc/init.d/xinetd restart
+     </pre>
+</li>
+<li>
+    <p>Change the propagation method.</p>
+    <p>Edit the file:
+        <tt class="literal">$NIMBUS_HOME/services/etc/nimbus/workspace-service/other/authz-callout-ACTIVE.xml</tt>
         and change:
-    <ul>
-        <li><tt class="literal">
-            &lt;property name="repoScheme" value="scp" /&gt;
-        </tt></li>
-        to:
-        <li><tt class="literal">
-            &lt;property name="repoScheme" value="lantorrent" /&gt;
-        </tt></li>
-    </ul>
+    </p>
+    <pre class="panel">&lt;property name="repoScheme" value="scp" /&gt;</pre>
+    to:
+    <pre class="panel">&lt;property name="repoScheme" value="lantorrent" /&gt;</pre>
+</li>
+<li>Restart the service:
+<pre class="panel">
+$ $NIMBUS_HOME/bin/nimbusctl restart
+</pre>
+</li>
 
-<li>restart the service:</li>
-$NIMBUS_HOME/bin/nimbusctl restart
+<li>
+    <p>
+        [optional] If the path to nimbus on the workspace-control nodes (VMMs)
+    is not <tt class="literal">/opt/nimbus</tt> you will also need to edit a configuration file on
+    all backend nodes.
+    </p>
 
-<li>[optional] if the path to nimbus on the workspace control nodes (VMMs)
-    is not /opt/nimbus you will also need to edit a configuration file on
-    all backends.</li>
+    <p>
+    In the file: <tt class="literal">&lt;workspace-control path&gt;/etc/workspace-control/propagation.conf</tt>
+    Adjust the value of:
 
-    <ul>
-    In the file:
-        <li><tt class="literal">
-    &lt;workspace control path&gt;/control/etc/workspace-control/propagation.conf
-        </tt></li>
-
-    make sure the value of:
-
-        <li><tt class="literal">
+    <pre class="panel">
     lantorrentexe: /opt/nimbus/bin/ltclient.sh
-        </tt></li>
+    </pre>
 
-    points to the proper location of you ltclinet.sh script.  This should
-    be a simple matter of changing /opt/nimbus to the path where you chose
+    <p>to point to the proper location of your <tt class="literal">ltclient.sh</tt> script.  This should
+    be a simple matter of changing <tt class="literal">/opt/nimbus</tt> to the path where you chose
     to install workspace control.
-    </ul>
+    </p>
+</li>
+</ol>
 
-<div class="note">
-<p class="note-title">cumulus.ini in Nimbus</p>
-For Nimbus installations this file can be found at
-<tt class="literal">$NIMBUS_HOME/cumulus/etc/cumulus.ini</tt>
+
+<!-- *********************************************************************** -->
+<!-- *********************************************************************** -->
+<!-- *********************************************************************** -->
+
+<br />
+
+<a name="backfill-and-spot-instances"> </a>
+<h2>Backfill and Spot Instances _NAMELINK(backfill-and-spot-instances)</h2>
+<p>
+    Backfill and Spot Instances are two related features, they both deal with
+    <i>asynchronous</i> instance requests, requests that may only be started
+    at appropriate times, if ever.
 </p>
+<p>
+	Spot instances are requested by remote users with a particular bid
+	(represented in Nimbus as a discount applied to minutes charged to your
+	account).  Users may consult the spot price history before bidding.  If the
+	bid is accepted (equal or higher to the current spot price), the instances
+	are started.  They may be stopped at a moment's notice. The implementation
+	is of EC2's 2010-08-31 WSDL, see the 
+	<a href="http://aws.amazon.com/ec2/spot-instances/">Amazon EC2 Spot
+	Instances</a> guide for more background.
+</p>
+<p>
+	Backfill is a mechanism that the <i>administrator</i> configures to keep
+	idle resources busy. You pick a particular VM image that will be launched
+	when the nodes would otherwise be idle.  This works nicely with systems
+	such as <a href="http://www.cs.wisc.edu/condor/">Condor</a> that can
+	gracefully deal with being preempted.
+</p>
+<p>
+    To jump to the precise semantics and configurations that are possible, see
+    the comments in the 
+    <a href="https://github.com/nimbusproject/nimbus/blob/HEAD/service/service/java/source/etc/workspace-service/async.conf">async.conf</a>
+    file.
+</p>
+<p>
+    To start using spot instances as a user, follow the
+    <a href="../elclients.html#spot">spot instance user's guide</a>.
+</p>
+<p>
+    To begin with backfill, read over the above conf file first.  Choose a
+    current administrator account to launch the image from or create one with
+    the "--dn" flag like so:
+</p>
+
+<div class="screen">
+<b>$</b> ./bin/nimbus-new-user --dn BACKFILL-SUPERUSER backfill@localhost<br>
 </div>
 
 <p>
-Each file in the path is read in (provided it exists).  The values found 
-in each file override the values found in the previous file in this list.
+    ... where "BACKFILL-SUPERUSER" is the user configured in async.conf (that
+    is the default value).
+</p>
+<p>
+    Backfill responds <i>immediately</i> to changes in the resource pool like
+    the presence of higher priority requests (which includes spot instances if
+    they are configured, as well as regular requests of course).  This also
+    includes when the resource pool is fundamentally changed by the
+    <tt class="literal">nimbus-nodes</tt> program.  When you add and remove
+    nodes, you are changing the overall capacity which is a critical piece
+    of information for mapping asynchronous requests like backfill and spot
+    instances.
+</p>
+<p>
+    A ramifications of that is that, since adding nodes is always done when the service is running, having backfill enabled while you make adjustments might
+    get in your way during this period.  It can be easier to disable backfill,
+    make node adjustments, and then re-enable backfill.  This applies especially
+    to <i>removing</i> nodes since the <tt class="literal">nimbus-nodes</tt> 
+    program does not allow nodes to be removed that have instances running on
+    them.
+</p>
+<p>
+    This could be said for spot instances as well.  It is slightly trickier with
+    spot instances because they are remote user requests and you may not want to
+    disable things abruptly for people.  But on the other hand, they are spot
+    instances so they should be able to deal with sudden terminations.
+</p>
+<p>
+    Another thing to watch out for is using the "max.instances=0" configuration.
+    Zero means as many as possible, but this maximum number is only calculated
+    at service startup time.  So if you add a bunch of new nodes to the resource
+    pool and the backfill instances do not immediately start consuming them
+    greedily, this is what is happening.  After adding all those nodes, stop and
+    then start the service and the backfill configuration will recalibrate.
+</p>
+
+<a href="#libvirttemplate">libvirt template and virtio</a>
+<a name="libvirttemplate"> </a>
+<h2>libvirt template and virtio</h2>
+<p>
+The submission of VMs to the hypervisor (with Xen or KVM) is done by Nimbus
+via libvirt.  Then submitting to libvirt the VM run request is described
+in an xml file.  This file has many potential customizations depending on
+the feature set supported by a particular VMM.  Many of the values are 
+dynamically determined by Nimbus, however a site admin may want to add their
+own custom optimizations.
+</p>
+<p>
+The xml used for every VM submission is generated from a template found
+in the workspace control installation at:
+<tt class="literal">
+/etc/workspace-control/libvirt_template.xml
+</tt>
+Admins can add site specific optimizations (like virtio) to this template.
+</p>
+
+ <p>
+            <a href="#cpprop">Copy Propagation</a>
+        </p>
+        <ul>
+            <li>
+                <a href="#cpprop-config">Configuration</a>
+
+<a name="cpprop"> </a>
+<h2>Copy Propagation _NAMELINK(cpprop)</h2>
+<p>
+Copy propagation is a very simple mechanism for getting a virtual machine 
+image out of Cumulus and coping it to the VMM for use as a VM instance.
+To use this mechanism all VMMs must have shared disk space with the 
+Cumulus repository.  In situations where users have a file system shared 
+among all nodes in the Nimbus setup boot times can be significantly reduced
+with the cp propagation driver.
+</p>
+
+<a name="cpprop-config"> </a>
+<h3>Copy Propagation Configuration _NAMELINK(cpprop-config)</h3>
+<p>
+In order to enable copy propagation you must edit the file 
+<tt class="literal">$NIMBUS_HOME/services/etc/nimbus/workspace-service/other/authz-callout-ACTIVE.xml</tt>
+        and change:
+    <pre class="panel">&lt;property name="repoScheme" value="scp" /&gt;</pre>
+    to:
+    <pre class="panel">&lt;property name="repoScheme" value="cp" /&gt;</pre>
 
 </p>
+<a name="#cpprop-passthrough"> </a>
+<h3>Copy Propagation Pass Through _NAMELINK(cpprop-passthrough)</h3>
+<p>
+It is possible to use copy propagation as a <i>pass through</i> propagation
+adapter.  This means that instead of only being able to boot files in the Cumulus 
+repository an administrator can allow users to specify any file on the 
+file system to which the VMM node's nimbus user has access.
+</p>
+<p>
+<B>WARNING: This should NOT be enabled in most cases due to security
+implications</b>.
+<BR>
+When using the copy propagation pass through adapter the Cumulus security
+ACL authz protection is entirely bypassed.  A user can boot and copy
+any image that the <i>nimbus</i> user can read.  This should be used with
+extreme care and only on cloud with nothing but completely trusted users.
+</p>
+
+
+<a name="imagecache"> </a>
+<h2>Image Cache _NAMELINK(imagecache)</h2>
+<p>
+Image propagation is the process of sending a VM image from the Cumulus 
+repository to the VMM which boots that image for the user.  This can be 
+a time consuming part of the boot process.  Often times the same image is
+booted multiple times on the same VMM.  In order to prevent that image from
+having to be repeatedly propagated we introduced an image cache to the 
+workspace control software.  
+</p>
+<p>
+When a user uploads an image to the Cumulus repository its md5 sum is 
+calculated and kept as metadata with that image.  Then when a user launches 
+that VM image, first its md5 sum is sent to the selected VMM.  That VMM
+checks its cache to see if it has a matching image.  If a match is found 
+the cached image is used.  If not the image is propagated to that VMM
+and added to its cache keyed by its md5 sum.
+</p>
+<a name="imagecache-config"> </a>
+<h3>Image Cache Configuration _NAMELINK(imagecache-config)</h3>
+<p>
+Each VMM that will have a cache enabled must alter this file:
+<tt class="literal">/opt/nimbus/etc/workspace-control/images.conf</tt>.
+Search for the two values 
+<tt class="literal">cachedir:</tt> 
+<tt class="literal">cache_size:</tt>
+<i>cachedir</i> is the path to the image cache and <i>cache_size</i> is 
+the maximum size of the cache.  When these values are enabled the cache
+will be in effect.
+</p>
+
+<a name="nimbusadministration"> </a>
+<h2>Nimbus Administration _NAMELINK(nimbusadministration)</h2>
+<p>
+The Nimbus administration tools, nimbus-admin and nimbus-nodes, allow
+administrators to configure VMMs and monitor the VMs running on them.
+The nimbus-nodes tool is used for configuring the VMM
+nodes available to the service. It allows you to list,
+add, update and remove nodes on the service. 
+The nimbus-admin tool allows you to monitor and shut down the virtual machines
+running on the service. 
+</p>
+
+<a name="nimbus-admin"> </a>
+<h3>Nimbus Admin _NAMELINK(nimbus-admin)</h3>
+<p>
+The nimbus-admin tool, is in the $NIMBUS_HOME/bin directory.
+You can view the nimbus-admin help with:
+<pre class="panel">
+$ nimbus-admin --help
+</pre>
+</p>
+<p>
+<b>List:</b><br />
+The --list command will display a list of virtual machines with the
+following information:<br />
+<b>id:</b> the VM id number<br />
+<b>node:</b> the physical VMM node the VM is running on<br />
+<b>group_id:</b> the group id number associated with the VM<br />
+<b>group_name:</b> the group name associated with the VM<br />
+<b>creator:</b> The Distinguished Name of the user who started this VM<br />
+<b>state:</b> Current state of the VM (Running, Propagated, etc)<br />
+<b>start time:</b> Time when the VM was created<br />
+<b>end time:</b> Time when the VM's lease expires<br />
+<b>memory:</b> Amount of memory being used by this VM<br />
+<b>cpu count:</b> Number of cpu cores being used by this VM<br />
+<b>uri:</b> Image and repository information of this VM<br />
+</p>
+<p>
+The following options can be used to filter which VMs are listed:<br />
+<b>--user (-u)</b> filter VMs by user display name<br />
+<b>--dn (-d)</b> filter VMs by user DN name<br />
+<b>--gid (-g)</b> filter VMs by group id<br />
+<b>--gname (-gn)</b> filter VMs by group name<br />
+<b>--host (-hn)</b> filter VMs running on a particular VMM host<br />
+<br />
+As an example, let's list by host:<br />
+<div class="screen"><pre>
+$ ./nimbus-admin --list --host worker02.example.org
+id         :  4
+node       :  worker02.example.org
+group_id   :  1
+group_name :  UNLIMITED
+creator    :  /O=Auto/OU=0718075a-873f-4eef-b0b3-d10a975e8c7d/CN=test@example.org
+state      :  Running
+start time :  Tue Sep 13 09:55:30 PDT 2011
+end time   :  Tue Sep 13 18:17:30 PDT 2011
+memory     :  512
+cpu count  :  1
+uri        :  /vms/sl54base_i386.img.gz
+</pre></div>
+<br />
+</p>
+<p>
+<b>Shutdown:</b><br />
+The --shutdown command destroys specified virtual machines.
+When shutting down a VM, a soft shutdown is called first, which puts
+the VM in "propagated" mode. Once the VM is propagated, it is then
+fully destroyed. You can specify which VMs to shutdown in the following ways:<br />
+<b>--all (-a)</b> shutdown all running VMs on service<br />
+<b>--id (-i)</b> shutdown VM by VM id<br />
+<b>--user (-u)</b> shutdown VM by user display name<br />
+<b>--dn (-d)</b> shutdown VM by user DN name<br />
+<b>--gid (-g)</b> shutdown VM by group id<br />
+<b>--gname (-gn)</b> shutdown VM by group name<br />
+<b>--host (-hn)</b> shutdown all VMs with specified host<br />
+<b>--seconds (-s)</b> amount of time to wait for VMs to shutdown to
+                      propagation mode before being trashed. If
+                      seconds option not specified, default is a
+                      maximum of 30 seconds
+<br /><br />
+Example:
+<div class="screen"><pre>
+$ nimbus-admin --shutdown --all
+</pre></div>
+<br /><br />
+The --shutdown command also allows you to shutdown a list of VMs at once
+by using a comma-separated list.<br />
+Example: 
+<div class="screen"><pre>
+./nimbus-admin --shutdown --id 3,4,5,6,10,13
+</pre></div>
+<br />
+</p>
+<p>
+<b>Nodes:</b><br />
+The --nodes command shows a list of all the VMM nodes running on the
+service with a list of VM ids each one is running.
+Example:
+<div class="screen"><pre>
+./nimbus-admin --nodes
+node1: 3,4,5
+node2: 1,2,6
+</pre></div>
+</p>
+
+<a name="nimbus-nodes"> </a>
+<h3>Nimbus Nodes _NAMELINK(nimbus-nodes)</h3>
+<p>
+To start using the nimbus-nodes tool first go to your nimbus home
+directory. $NIMBUS_HOME/bin where you will find the script
+nimbus-nodes. Run ./nimbus-nodes --help to see the help file which
+lists all available commands.
+</p>
+<p>
+<b>List:</b><br />
+The --list command of nimbus-nodes lists all the VMM nodes running
+on the service. You can also input a comma separated list of VMMs
+to list if you want to specify which VMMs you want to see. The
+list function outputs the following information about each node:
+<br /><br />
+<b>hostname:</b>the VMM node name<br />
+<b>pool:</b>Resource pool name for this node<br />
+<b>memory:</b>total memory available for this node<br />
+<b>memory available:</b>current memory available on the node<br />
+<b>networks:</b>list of networks associated with this node.
+Value of * means all available networks<br />
+<b>in_use:</b>whether or not this node is being used<br />
+<b>active:</b>whether or not this node is currently running<br />
+<br />
+</p>
+<p>
+<b>Add:</b><br />
+The --add (-a) HOSTS command adds the specified VMM nodes to the
+pool. Node paramets can be specified as additional arguments and
+if no parameter is specified a default will be read from the
+config file.
+</p>
+<p>
+<b>Update:</b><br />
+The --update (-u) HOSTS command updates the configuration values
+of VMM nodes. At least one node parameter must be specified as
+an additional argument. 
+</p>
+<p>
+<b>VMM Node Parameters</b><br />
+The following node parameters can be used as additional arguments
+for the --add and --update commands. 
+<br /><br />
+<b>--active (-A)</b> Allow VMM nodes to take on new virtual machines.
+Default for new nodes.<br />
+<b>--inactive (-i)</b> Prevent VMM nodes from accepting new VMs.
+This will not terminate any already running VMs.<br />
+<b>--memory (-m)</b> Maximum memory available on node for VMs<br />
+<b>--networks (-n)</b> List of networks associated with a node.
+A value of * means all available networks<br />
+<b>--pool (-p)</b> Resource pool name for this VMM node<br />
+</p>
+<p>
+<b>Remove</b><br />
+The --remove (-d) command removes VMM nodes from the nimbus resource 
+pool. In use nodes cannot be removed.
+</p>
+<p>
+<b>Network Pool Allocation</b><br />
+The --allocation (-N) command provides network pool allocation
+information. Outputs the following information for each pool
+entry: hostname, ip, mac address, broadcast, subnet mask, gateway,
+in_use, explicit mac.<br /><br />
+This command also has three optional commands.<br/>
+<b>--pool</b> allows you to enter a pool name and only displays
+entries from that pool<br />
+<b>--free</b> displays only entries that are not in_use<br />
+<b>--used</b> displays only entries that are in_use<br />
+</p>
+
+<a name="gen-opts"> </a>
+<h3>General Options _NAMELINK(gen-opts)</h3>
+<p>
+These options are for general usage of nimbus-nodes and nimbus-admin
+<br /><br />
+<b>--help (-h)</b> Prints help file<br />
+<b>--conf (-c)</b> Use to specify an alternate configuration file.<br />
+<b>--debug</b> Enables debug output for troubleshooting
+</p>
+
+<a name="output-opts"> </a>
+<h3>Reporting Output Options _NAMELINK(output-opts)</h3>
+<p>
+nimbus-nodes and nimbus-admin also have various reporting outputs
+that can be used. These options work with any of the commands listed
+above.
+<br /><br />
+<b>--report (-r) FIELDS: </b>Only report specified fields. Argument
+is a comma-separated list<br />
+<b>--batch (-b): </b>Report results with one record perline, using
+an optional delimiter.<br />
+<b>--delimiter (-D): </b>Delimiter between fields in batch mode.
+Default is a single space.<br />
+<b>--json (-j): </b>Report results in JSON format.<br />
+<b>--output (-o) FILE:</b>Write results to FILE instead of stdout.
+</p>
+
+ 
+
 <br />
 <br />
 <br />
